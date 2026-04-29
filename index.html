@@ -7,8 +7,8 @@
 <meta name="description" content="Application de gestion d'équipe et de planning de shifts avec synchronisation Supabase">
 <meta name="theme-color" content="#0EA5E9">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
-<!-- Supabase JS SDK (chargement synchrone pour garantir disponibilité) -->
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2" onerror="window._sbSdkFailed=true;console.warn('Supabase SDK indisponible')"></script>
+<!-- Supabase JS SDK (defer = chargé sans bloquer la page) -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2" defer onerror="window._sbSdkFailed=true;console.warn('Supabase SDK indisponible')"></script>
 <style>
 :root {
   --p1:#0EA5E9; --p2:#0284C7; --p3:#0369A1;
@@ -2853,14 +2853,22 @@ async function boot(){
   }
 }
 
-// Affichage immédiat de la grille (avant Supabase, garantit l'affichage)
-try{
-  renderEmpGrid();
-}catch(e){
-  console.error('renderEmpGrid error:',e);
-  // Fallback : injection brute si renderEmpGrid plante
-  const g=document.getElementById('emp-grid');
-  if(g) g.innerHTML='<div style="color:#fff;text-align:center;padding:20px;font-size:13px">⚠️ Erreur de chargement<br><small style="opacity:.7">'+(e?.message||e)+'</small></div>';
+// Affichage immédiat de la grille (avant TOUT, garantit l'affichage)
+function bootInitialRender(){
+  try{
+    renderEmpGrid();
+  }catch(e){
+    console.error('renderEmpGrid error:',e);
+    const g=document.getElementById('emp-grid');
+    if(g) g.innerHTML='<div style="color:#fff;text-align:center;padding:20px;font-size:13px;background:rgba(255,255,255,.1);border-radius:12px">⚠️ Erreur de chargement<br><small style="opacity:.7">'+(e?.message||e)+'</small><br><button onclick="resetAllData()" style="margin-top:10px;background:#fff;color:#0EA5E9;border:none;padding:8px 14px;border-radius:8px;font-weight:700;font-size:12px">🔄 Réinitialiser</button></div>';
+  }
+}
+
+// Lancer le rendu dès que possible
+if(document.readyState==='loading'){
+  document.addEventListener('DOMContentLoaded',bootInitialRender);
+}else{
+  bootInitialRender();
 }
 
 // Capture d'erreurs JS visibles (utile pour debug mobile)
@@ -2871,8 +2879,8 @@ window.addEventListener('error',ev=>{
   }
 });
 
-// Lancement Supabase en arrière-plan (n'empêche pas l'affichage)
-boot();
+// Lancement Supabase en ARRIÈRE-PLAN, après un délai pour laisser l'UI s'afficher
+setTimeout(()=>{boot();},500);
 </script>
 </body>
 </html>
