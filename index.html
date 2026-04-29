@@ -7,12 +7,178 @@
 <meta name="description" content="Application de gestion d'équipe et de planning de shifts avec synchronisation Supabase">
 <meta name="theme-color" content="#0EA5E9">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
-<!-- Supabase JS SDK - chargé localement depuis le repo -->
-<script src="./supabase.js"></script>
+<!-- API REST Supabase native (pas de SDK, pas de CDN) -->
 <script>
-window._sbSdkStatus = (typeof window.supabase !== 'undefined') ? 'loaded' : 'failed';
-window._sbSdkSource = './supabase.js';
-console.log('SDK Supabase status:', window._sbSdkStatus);
+window._sbSdkStatus = 'loaded';
+window._sbSdkSource = 'API REST native';
+
+// Wrapper minimaliste qui imite l'interface du SDK Supabase
+// pour utiliser fetch() au lieu de la lib JS officielle
+window.supabase = {
+  createClient: function(url, key, opts){
+    const baseUrl = url.replace(/\/$/, '');
+    const restUrl = baseUrl + '/rest/v1';
+    const storageUrl = baseUrl + '/storage/v1';
+    const headers = {
+      'apikey': key,
+      'Authorization': 'Bearer ' + key,
+      'Content-Type': 'application/json'
+    };
+
+    // Builder de requête qui imite supabase.from(table).select().order().eq()...
+    function makeQuery(table){
+      const state = {
+        method: 'GET',
+        path: '/' + table,
+        params: new URLSearchParams(),
+        body: null,
+        prefer: [],
+        head: false,
+        single: false
+      };
+
+      const builder = {
+        select: function(cols, opts){
+          state.method = 'GET';
+          state.params.set('select', cols || '*');
+          if(opts && opts.head){ state.head = true; state.method = 'HEAD'; }
+          if(opts && opts.count){ state.prefer.push('count=' + opts.count); }
+          return builder;
+        },
+        insert: function(rows){
+          state.method = 'POST';
+          state.body = JSON.stringify(Array.isArray(rows) ? rows : [rows]);
+          state.prefer.push('return=representation');
+          return builder;
+        },
+        upsert: function(rows, opts){
+          state.method = 'POST';
+          state.body = JSON.stringify(Array.isArray(rows) ? rows : [rows]);
+          let resolution = 'merge-duplicates';
+          state.prefer.push('resolution=' + resolution);
+          state.prefer.push('return=representation');
+          if(opts && opts.onConflict){ state.params.set('on_conflict', opts.onConflict); }
+          return builder;
+        },
+        update: function(values){
+          state.method = 'PATCH';
+          state.body = JSON.stringify(values);
+          state.prefer.push('return=representation');
+          return builder;
+        },
+        delete: function(){
+          state.method = 'DELETE';
+          state.prefer.push('return=representation');
+          return builder;
+        },
+        eq: function(col, val){ state.params.append(col, 'eq.' + val); return builder; },
+        neq: function(col, val){ state.params.append(col, 'neq.' + val); return builder; },
+        gt: function(col, val){ state.params.append(col, 'gt.' + val); return builder; },
+        gte: function(col, val){ state.params.append(col, 'gte.' + val); return builder; },
+        lt: function(col, val){ state.params.append(col, 'lt.' + val); return builder; },
+        lte: function(col, val){ state.params.append(col, 'lte.' + val); return builder; },
+        in: function(col, vals){
+          state.params.append(col, 'in.(' + vals.map(v => '"'+v+'"').join(',') + ')');
+          return builder;
+        },
+        order: function(col, opts){
+          const dir = (opts && opts.ascending === false) ? 'desc' : 'asc';
+          const cur = state.params.get('order') || '';
+          state.params.set('order', (cur ? cur + ',' : '') + col + '.' + dir);
+          return builder;
+        },
+        limit: function(n){ state.params.set('limit', String(n)); return builder; },
+        single: function(){
+          state.single = true;
+          return builder;
+        },
+        // Exécuter la requête au moment où on attend la promise
+        then: function(onFulfilled, onRejected){
+          const url = restUrl + state.path + (state.params.toString() ? '?' + state.params.toString() : '');
+          const reqHeaders = Object.assign({}, headers);
+          if(state.prefer.length) reqHeaders['Prefer'] = state.prefer.join(',');
+          if(state.single) reqHeaders['Accept'] = 'application/vnd.pgrst.object+json';
+
+          const fetchOpts = { method: state.method, headers: reqHeaders };
+          if(state.body) fetchOpts.body = state.body;
+
+          return fetch(url, fetchOpts)
+            .then(async res => {
+              const ct = res.headers.get('content-type') || '';
+              const cr = res.headers.get('content-range') || '';
+              let data = null, error = null;
+              const txt = await res.text();
+              if(!res.ok){
+                try { error = JSON.parse(txt); } catch { error = { message: txt || ('HTTP ' + res.status), status: res.status }; }
+                if(!error.message) error.message = 'HTTP ' + res.status;
+                return { data: null, error: error, count: null, status: res.status };
+              }
+              if(state.head){
+                let count = null;
+                if(cr){ const parts = cr.split('/'); if(parts[1]) count = parseInt(parts[1], 10); }
+                return { data: null, error: null, count: count, status: res.status };
+              }
+              if(txt && ct.includes('json')){
+                try { data = JSON.parse(txt); } catch { data = null; }
+              } else if(txt) {
+                data = txt;
+              }
+              let count = null;
+              if(cr){ const parts = cr.split('/'); if(parts[1]) count = parseInt(parts[1], 10); }
+              return { data: data, error: null, count: count, status: res.status };
+            })
+            .then(onFulfilled, onRejected);
+        }
+      };
+      return builder;
+    }
+
+    return {
+      from: makeQuery,
+      // Storage minimaliste pour les pièces jointes
+      storage: {
+        from: function(bucket){
+          return {
+            upload: async function(path, file, opts){
+              const u = storageUrl + '/object/' + bucket + '/' + encodeURIComponent(path);
+              const res = await fetch(u, {
+                method: 'POST',
+                headers: {
+                  'apikey': key,
+                  'Authorization': 'Bearer ' + key,
+                  'Content-Type': file.type || 'application/octet-stream',
+                  'x-upsert': (opts && opts.upsert) ? 'true' : 'false',
+                  'Cache-Control': (opts && opts.cacheControl) || '3600'
+                },
+                body: file
+              });
+              if(!res.ok){
+                const t = await res.text();
+                let error;
+                try { error = JSON.parse(t); } catch { error = { message: t || 'HTTP ' + res.status }; }
+                return { data: null, error: error };
+              }
+              const data = await res.json().catch(() => ({}));
+              return { data: data, error: null };
+            },
+            getPublicUrl: function(path){
+              return { data: { publicUrl: storageUrl + '/object/public/' + bucket + '/' + encodeURIComponent(path) } };
+            }
+          };
+        }
+      },
+      // Stubs pour le realtime (pas supporté en API REST — on utilise auto-refresh à la place)
+      channel: function(){
+        return {
+          on: function(){ return this; },
+          subscribe: function(){ return this; }
+        };
+      },
+      removeChannel: function(){}
+    };
+  }
+};
+console.log('Wrapper API REST Supabase chargé');
 </script>
 <style>
 :root {
@@ -1163,27 +1329,30 @@ async function loadFromCloud(){
   }
 }
 
-// S'abonne aux changements en temps réel
+// S'abonne aux changements — VERSION API REST avec polling toutes les 30 secondes
+let _autoRefreshTimer=null;
 function subscribeRealtime(){
-  if(!cloudMode||!supabase)return;
-  // Nettoyer les anciennes subscriptions
-  realtimeChannels.forEach(ch=>{try{supabase.removeChannel(ch);}catch{}});
-  realtimeChannels=[];
-
-  const tables=['sp_employees','sp_shifts','sp_plan','sp_reclamations','sp_remplacements'];
-  tables.forEach(table=>{
-    const ch=supabase.channel(`rt-${table}`)
-      .on('postgres_changes',{event:'*',schema:'public',table},payload=>{
-        // Ignorer nos propres changements (anti-écho)
-        if(payload.commit_timestamp&&Date.now()-new Date(payload.commit_timestamp).getTime()<300){
-          // Skip si trop récent (probablement nous)
-        }
-        // Recharger silencieusement (debounced)
-        debouncedReload();
-      })
-      .subscribe();
-    realtimeChannels.push(ch);
-  });
+  if(!cloudMode)return;
+  // Nettoyer ancien timer
+  if(_autoRefreshTimer){clearInterval(_autoRefreshTimer);_autoRefreshTimer=null;}
+  // Auto-actualisation toutes les 30 secondes
+  _autoRefreshTimer=setInterval(async()=>{
+    if(!cloudMode||document.hidden)return; // pause si onglet inactif
+    try{
+      await loadFromCloud();
+      // Re-render la page active sans déranger l'utilisateur
+      const active=document.querySelector('.page.active');
+      if(active){
+        const id=active.id.replace('page-','');
+        if(id==='home')renderHome();
+        else if(id==='planning')renderPlanning();
+        else if(id==='reclamations')renderReclamations();
+        else if(id==='remplacements')renderRemplacements();
+      }
+      refreshSelects();updateBadgeRecl();
+    }catch(e){console.warn('Auto-refresh failed:',e);}
+  },30000); // 30 secondes
+  console.log('Auto-refresh activé (30s)');
 }
 
 let _reloadTimer=null;
@@ -2677,10 +2846,49 @@ function renderAboutSheet(){
 }
 
 // Cliquer sur la pastille de sync ouvre la config Supabase (si admin)
-document.getElementById('sync-pill')?.addEventListener('click',()=>{
+document.getElementById('sync-pill')?.addEventListener('click',async()=>{
   if(!currentUser){toast('Connectez-vous d\'abord.');return;}
-  if(!isAdmin()){toast('🔒 Réservé aux administrateurs.');return;}
-  openSheet('sheet-supabase');
+  if(!isAdmin()){
+    // Pour non-admin : juste rafraîchir si en mode cloud
+    if(cloudMode){
+      setSyncStatus('syncing','Actualisation...');
+      await loadFromCloud();
+      const active=document.querySelector('.page.active');
+      if(active){
+        const id=active.id.replace('page-','');
+        if(id==='home')renderHome();
+        else if(id==='planning')renderPlanning();
+        else if(id==='reclamations')renderReclamations();
+        else if(id==='remplacements')renderRemplacements();
+      }
+      refreshSelects();updateBadgeRecl();
+      toast('🔄 Données actualisées');
+    }else{
+      toast('🔒 Mode local — admin requis pour configurer.');
+    }
+    return;
+  }
+  // Admin connecté en cloud : propose rafraîchir ou configurer
+  if(cloudMode){
+    if(confirm('🔄 Actualiser les données maintenant ?\n\n(Annuler pour ouvrir la configuration Supabase)')){
+      setSyncStatus('syncing','Actualisation...');
+      await loadFromCloud();
+      const active=document.querySelector('.page.active');
+      if(active){
+        const id=active.id.replace('page-','');
+        if(id==='home')renderHome();
+        else if(id==='planning')renderPlanning();
+        else if(id==='reclamations')renderReclamations();
+        else if(id==='remplacements')renderRemplacements();
+      }
+      refreshSelects();updateBadgeRecl();
+      toast('🔄 Données actualisées');
+    }else{
+      openSheet('sheet-supabase');
+    }
+  }else{
+    openSheet('sheet-supabase');
+  }
 });
 
 // ══════════════════════════════════════
