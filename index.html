@@ -7,8 +7,41 @@
 <meta name="description" content="Application de gestion d'équipe et de planning de shifts avec synchronisation Supabase">
 <meta name="theme-color" content="#0EA5E9">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
-<!-- Supabase JS SDK (defer = chargé sans bloquer la page) -->
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2" defer onerror="window._sbSdkFailed=true;console.warn('Supabase SDK indisponible')"></script>
+<!-- Supabase JS SDK - chargement avec 3 CDN de secours -->
+<script>
+window._sbSdkStatus='loading';
+window._sbSdkSource='';
+(function loadSupabase(){
+  const cdns=[
+    'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2',
+    'https://unpkg.com/@supabase/supabase-js@2',
+    'https://esm.sh/@supabase/supabase-js@2'
+  ];
+  let i=0;
+  function tryNext(){
+    if(i>=cdns.length){
+      window._sbSdkStatus='failed';
+      console.error('Tous les CDN Supabase ont échoué');
+      return;
+    }
+    const url=cdns[i];
+    const s=document.createElement('script');
+    s.src=url;
+    s.onload=()=>{
+      window._sbSdkStatus='loaded';
+      window._sbSdkSource=url;
+      console.log('SDK Supabase chargé depuis:',url);
+    };
+    s.onerror=()=>{
+      console.warn('Échec CDN',i+1,'/',cdns.length,':',url);
+      i++;
+      tryNext();
+    };
+    document.head.appendChild(s);
+  }
+  tryNext();
+})();
+</script>
 <style>
 :root {
   --p1:#0EA5E9; --p2:#0284C7; --p3:#0369A1;
@@ -1025,30 +1058,19 @@ async function initSupabase(){
   if(!url||!key){setSyncStatus('local');return false;}
   try{
     setSyncStatus('syncing','Connexion...');
-    // Attendre le SDK jusqu'à 15 secondes (chargement réseau lent)
+    // Attendre le SDK : 20 secondes max
     let waited=0;
-    while(typeof window.supabase==='undefined'&&waited<15000){
+    while(window._sbSdkStatus==='loading'&&waited<20000){
       await new Promise(r=>setTimeout(r,300));
       waited+=300;
     }
-    // Si toujours pas chargé, tenter une recharge depuis un CDN alternatif
-    if(typeof window.supabase==='undefined'){
-      console.warn('SDK Supabase non chargé, tentative depuis unpkg...');
-      await new Promise((resolve,reject)=>{
-        const s=document.createElement('script');
-        s.src='https://unpkg.com/@supabase/supabase-js@2';
-        s.onload=resolve;
-        s.onerror=()=>reject(new Error('Échec chargement SDK depuis unpkg'));
-        document.head.appendChild(s);
-        setTimeout(()=>reject(new Error('Timeout SDK unpkg')),10000);
-      }).catch(e=>{console.error(e);});
-    }
-    if(typeof window.supabase==='undefined'){
-      console.error('SDK Supabase indisponible après tentatives');
+    if(window._sbSdkStatus==='failed'||typeof window.supabase==='undefined'){
+      console.error('SDK Supabase indisponible');
       setSyncStatus('error','SDK manquant');
-      window._sbLastError='SDK Supabase non chargé. Vérifiez votre connexion internet ou réessayez.';
+      window._sbLastError='Impossible de charger le SDK Supabase depuis aucun CDN.\n\nCauses possibles :\n• Réseau lent ou bloqué par votre opérateur (essayez en Wi-Fi)\n• Adblock/VPN qui bloque les CDN\n• Pare-feu d\'entreprise';
       return false;
     }
+    console.log('SDK chargé depuis:',window._sbSdkSource);
     supabase=window.supabase.createClient(url,key,{
       auth:{persistSession:false},
       realtime:{params:{eventsPerSecond:5}}
