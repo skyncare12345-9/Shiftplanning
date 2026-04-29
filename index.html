@@ -7,12 +7,13 @@
 <meta name="description" content="Application de gestion d'équipe et de planning de shifts avec synchronisation Supabase">
 <meta name="theme-color" content="#0EA5E9">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
-<!-- Supabase JS SDK - chargement avec 3 CDN de secours -->
+<!-- Supabase JS SDK - 4 CDN avec Cloudflare en priorité -->
 <script>
 window._sbSdkStatus='loading';
 window._sbSdkSource='';
 (function loadSupabase(){
   const cdns=[
+    'https://cdnjs.cloudflare.com/ajax/libs/supabase-js/2.39.7/supabase.min.js',
     'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2',
     'https://unpkg.com/@supabase/supabase-js@2',
     'https://esm.sh/@supabase/supabase-js@2'
