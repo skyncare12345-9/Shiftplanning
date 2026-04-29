@@ -1,0 +1,2880 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>Shift Planning — Gestion d'équipe</title>
+<meta name="description" content="Application de gestion d'équipe et de planning de shifts avec synchronisation Supabase">
+<meta name="theme-color" content="#0EA5E9">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<!-- Supabase JS SDK - chargé localement depuis le repo -->
+<script src="./supabase.js"></script>
+<script>
+window._sbSdkStatus = (typeof window.supabase !== 'undefined') ? 'loaded' : 'failed';
+window._sbSdkSource = './supabase.js';
+console.log('SDK Supabase status:', window._sbSdkStatus);
+</script>
+<style>
+:root {
+  --p1:#0EA5E9; --p2:#0284C7; --p3:#0369A1;
+  --bg:#F8FAFC; --surface:#FFFFFF;
+  --text:#0F172A; --text2:#64748B; --text3:#94A3B8;
+  --border:#E2E8F0; --shadow:0 1px 3px rgba(0,0,0,.08),0 4px 16px rgba(0,0,0,.06);
+  --shadow-lg:0 8px 32px rgba(14,165,233,.16);
+  --radius:16px; --radius-sm:10px;
+  --M:#FDE68A; --Mfg:#92400E;
+  --S:#BAE6FD; --Sfg:#075985;
+  --N:#DDD6FE; --Nfg:#5B21B6;
+  --C:#FCA5A5; --Cfg:#991B1B;
+  --R:#E2E8F0; --Rfg:#475569;
+  --green:#10B981; --orange:#F59E0B; --red:#EF4444;
+}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+html{height:100%}
+body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);height:100%;overflow:hidden;font-size:14px}
+
+/* ══ SPLASH / LOGIN ══ */
+#splash{
+  position:fixed;inset:0;z-index:999;
+  background:linear-gradient(160deg,#0EA5E9 0%,#0369A1 60%,#1E3A5F 100%);
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  padding:24px;transition:opacity .4s,transform .4s;
+}
+#splash.hide{opacity:0;transform:scale(1.04);pointer-events:none}
+.splash-logo{font-size:56px;margin-bottom:16px;animation:pop .5s cubic-bezier(.34,1.56,.64,1)}
+.splash-title{font-size:26px;font-weight:800;color:#fff;letter-spacing:-.5px}
+.splash-sub{font-size:13px;color:rgba(255,255,255,.65);margin-top:6px;margin-bottom:40px}
+
+/* Phase grille */
+#phase-grid{width:100%;max-width:420px}
+.phase-label{font-size:12px;font-weight:600;color:rgba(255,255,255,.7);text-transform:uppercase;letter-spacing:.8px;margin-bottom:14px;text-align:center}
+.emp-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:16px}
+.emp-card{
+  background:rgba(255,255,255,.12);backdrop-filter:blur(8px);
+  border:1px solid rgba(255,255,255,.2);border-radius:14px;
+  padding:14px 8px;cursor:pointer;text-align:center;
+  transition:all .2s;-webkit-tap-highlight-color:transparent;
+}
+.emp-card:active{transform:scale(.95);background:rgba(255,255,255,.25)}
+.emp-card .av{
+  width:44px;height:44px;border-radius:50%;
+  display:flex;align-items:center;justify-content:center;
+  font-weight:700;font-size:15px;color:#fff;margin:0 auto 8px;
+}
+.emp-card .en{font-size:12px;font-weight:600;color:#fff;line-height:1.3}
+.emp-card .er{font-size:10px;color:rgba(255,255,255,.6);margin-top:2px}
+.emp-card.is-admin{border-color:rgba(255,215,0,.5);background:rgba(255,215,0,.12)}
+
+/* Phase PIN */
+#phase-pin{width:100%;max-width:340px;display:none}
+.back-btn{display:flex;align-items:center;gap:6px;color:rgba(255,255,255,.8);font-size:13px;font-weight:500;cursor:pointer;margin-bottom:20px;background:none;border:none;font-family:'Inter',sans-serif}
+.selected-card{
+  display:flex;align-items:center;gap:12px;
+  background:rgba(255,255,255,.12);border-radius:14px;padding:12px 16px;margin-bottom:24px;
+}
+.selected-card .sav{width:40px;height:40px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px;color:#fff;flex-shrink:0}
+.selected-card .sn{font-weight:700;font-size:14px;color:#fff}
+.selected-card .sr{font-size:11px;color:rgba(255,255,255,.65)}
+.dots{display:flex;gap:14px;justify-content:center;margin-bottom:24px}
+.dot{width:14px;height:14px;border-radius:50%;background:rgba(255,255,255,.25);transition:all .15s}
+.dot.on{background:#fff;transform:scale(1.1)}
+.numpad{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.key{
+  padding:16px;background:rgba(255,255,255,.12);backdrop-filter:blur(4px);
+  border:1px solid rgba(255,255,255,.15);border-radius:14px;
+  font-size:20px;font-weight:600;color:#fff;cursor:pointer;
+  transition:all .15s;font-family:'Inter',sans-serif;
+}
+.key:active{transform:scale(.93);background:rgba(255,255,255,.3)}
+.key.del{background:rgba(239,68,68,.2);border-color:rgba(239,68,68,.3);font-size:18px}
+.pin-err{color:#FCA5A5;font-size:12px;text-align:center;margin-top:12px;min-height:18px;font-weight:500}
+.pin-hint{color:rgba(255,255,255,.4);font-size:11px;text-align:center;margin-top:8px}
+
+/* ══ APP SHELL ══ */
+#app{display:none;height:100%;flex-direction:column}
+#app.show{display:flex}
+
+/* Header */
+.top-bar{
+  background:var(--surface);border-bottom:1px solid var(--border);
+  padding:12px 16px;display:flex;align-items:center;gap:10px;
+  position:sticky;top:0;z-index:50;
+}
+.top-bar .logo{font-size:22px}
+.top-bar .app-name{font-size:16px;font-weight:800;color:var(--p2);letter-spacing:-.3px}
+.top-bar .user-chip{
+  display:flex;align-items:center;gap:6px;
+  background:var(--bg);border-radius:20px;padding:5px 10px 5px 5px;
+  cursor:pointer;border:1px solid var(--border);
+}
+.top-bar .uc-av{width:26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:#fff;flex-shrink:0}
+.top-bar .uc-name{font-size:12px;font-weight:600;max-width:70px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+/* Sync indicator pill */
+.sync-pill{
+  margin-left:auto;display:flex;align-items:center;gap:6px;
+  background:var(--bg);border:1px solid var(--border);border-radius:20px;
+  padding:4px 10px;font-size:11px;font-weight:600;cursor:pointer;
+  transition:all .2s;color:var(--text2);font-family:'Inter',sans-serif;
+}
+.sync-pill:active{transform:scale(.96)}
+.sync-pill.local{color:var(--text2)}
+.sync-pill.cloud{background:#D1FAE5;border-color:#86EFAC;color:#065F46}
+.sync-pill.syncing{background:#FEF3C7;border-color:#FDE68A;color:#92400E}
+.sync-pill.error{background:#FEE2E2;border-color:#FCA5A5;color:#991B1B}
+.sync-dot{width:6px;height:6px;border-radius:50%;background:var(--text3);transition:background .2s}
+.sync-pill.local .sync-dot{background:#94A3B8}
+.sync-pill.cloud .sync-dot{background:#10B981;animation:pulse 2s infinite}
+.sync-pill.syncing .sync-dot{background:#F59E0B;animation:spin 1s linear infinite}
+.sync-pill.error .sync-dot{background:#EF4444}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* Code block (pour SQL helper) */
+.code-block{
+  background:#0F172A;color:#A7F3D0;font-family:Monaco,Menlo,Consolas,monospace;
+  font-size:11px;line-height:1.5;padding:12px;border-radius:10px;
+  max-height:240px;overflow:auto;white-space:pre;margin-bottom:10px;
+}
+.config-row{display:flex;align-items:center;gap:8px;padding:10px 0;border-bottom:1px solid var(--border)}
+.config-row:last-child{border-bottom:none}
+.config-row .lbl{flex:1;font-size:13px;font-weight:500}
+.config-row .val{font-size:12px;color:var(--text2);font-family:Monaco,monospace;max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+/* Scroll area */
+.scroll-area{flex:1;overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch}
+.page{display:none;padding:16px;animation:fadeUp .25s ease}
+.page.active{display:block}
+@keyframes fadeUp{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+@keyframes pop{from{transform:scale(.6);opacity:0}to{transform:scale(1);opacity:1}}
+
+/* Bottom nav */
+.bot-nav{
+  display:flex;background:var(--surface);border-top:1px solid var(--border);
+  padding:8px 0 max(8px,env(safe-area-inset-bottom));
+  position:sticky;bottom:0;z-index:50;
+}
+.nav-item{
+  flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;
+  padding:6px 4px;cursor:pointer;border:none;background:none;
+  font-family:'Inter',sans-serif;color:var(--text3);transition:color .2s;
+}
+.nav-item.active{color:var(--p1)}
+.nav-item .ni{font-size:22px;line-height:1}
+.nav-item .nl{font-size:10px;font-weight:600;letter-spacing:.2px}
+.nav-badge{
+  position:absolute;top:-2px;right:-4px;background:var(--red);color:#fff;
+  border-radius:10px;padding:1px 5px;font-size:9px;font-weight:700;
+}
+
+/* ══ COMPOSANTS ══ */
+.section-label{font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.8px;margin:20px 0 10px}
+.card{background:var(--surface);border-radius:var(--radius);box-shadow:var(--shadow);margin-bottom:12px;overflow:hidden}
+.card-pad{padding:16px}
+
+/* Pill badge */
+.pill{display:inline-flex;align-items:center;gap:4px;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:600}
+.pill-M{background:var(--M);color:var(--Mfg)}
+.pill-S{background:var(--S);color:var(--Sfg)}
+.pill-N{background:var(--N);color:var(--Nfg)}
+.pill-C{background:var(--C);color:var(--Cfg)}
+.pill-R{background:var(--R);color:var(--Rfg)}
+.pill-green{background:#D1FAE5;color:#065F46}
+.pill-orange{background:#FEF3C7;color:#92400E}
+.pill-red{background:#FEE2E2;color:#991B1B}
+
+/* Buttons */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:11px 18px;border:none;border-radius:var(--radius-sm);font-family:'Inter',sans-serif;font-size:13px;font-weight:600;cursor:pointer;transition:all .15s;-webkit-tap-highlight-color:transparent}
+.btn:active{transform:scale(.97)}
+.btn-primary{background:var(--p1);color:#fff}
+.btn-primary:active{background:var(--p2)}
+.btn-outline{background:transparent;color:var(--p1);border:1.5px solid var(--p1)}
+.btn-ghost{background:var(--bg);color:var(--text2);border:1px solid var(--border)}
+.btn-danger{background:#FEE2E2;color:var(--red);border:1px solid #FCA5A5}
+.btn-wa{background:#25D366;color:#fff}
+.btn-full{width:100%}
+.btn-sm{padding:7px 14px;font-size:12px;border-radius:8px}
+
+/* Input */
+.inp-group{margin-bottom:14px}
+.inp-group label{display:block;font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px}
+.inp-group input,.inp-group select,.inp-group textarea{
+  width:100%;padding:11px 13px;border:1.5px solid var(--border);border-radius:var(--radius-sm);
+  font-family:'Inter',sans-serif;font-size:14px;color:var(--text);background:var(--bg);
+  outline:none;transition:border-color .2s,box-shadow .2s;-webkit-appearance:none;
+}
+.inp-group input:focus,.inp-group select:focus,.inp-group textarea:focus{border-color:var(--p1);box-shadow:0 0 0 3px rgba(14,165,233,.12);background:#fff}
+.inp-group textarea{resize:none;min-height:72px}
+.inp-row{display:flex;gap:10px}
+.inp-row .inp-group{flex:1}
+
+/* ══ PAGE : MON PLANNING ══ */
+.hero-shift{
+  background:linear-gradient(135deg,var(--p1),var(--p3));
+  border-radius:var(--radius);padding:20px;margin-bottom:14px;
+  box-shadow:var(--shadow-lg);color:#fff;
+}
+.hero-date{font-size:12px;font-weight:600;opacity:.8;margin-bottom:4px}
+.hero-name{font-size:20px;font-weight:800;margin-bottom:12px;letter-spacing:-.3px}
+.hero-shift-badge{
+  display:inline-flex;align-items:center;gap:8px;
+  background:rgba(255,255,255,.2);backdrop-filter:blur(4px);
+  border-radius:12px;padding:8px 14px;font-size:14px;font-weight:700;
+}
+.hero-next{margin-top:14px;padding-top:14px;border-top:1px solid rgba(255,255,255,.2);font-size:12px;opacity:.8}
+
+/* Week strip */
+.week-strip{display:flex;gap:6px;overflow-x:auto;padding-bottom:4px;scrollbar-width:none;margin-bottom:14px}
+.week-strip::-webkit-scrollbar{display:none}
+.week-day{
+  flex-shrink:0;width:52px;border-radius:12px;padding:10px 4px;text-align:center;
+  border:1.5px solid var(--border);background:var(--surface);cursor:pointer;transition:all .2s;
+}
+.week-day.today{border-color:var(--p1);background:#EFF6FF}
+.week-day.today .wd-num{color:var(--p1)}
+.week-day .wd-label{font-size:10px;font-weight:600;color:var(--text3);margin-bottom:4px}
+.week-day .wd-num{font-size:16px;font-weight:800;color:var(--text);margin-bottom:6px}
+.week-day .wd-shift{width:28px;height:28px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;margin:0 auto}
+
+/* Team list */
+.team-row{display:flex;align-items:center;gap:10px;padding:12px 0;border-bottom:1px solid var(--border)}
+.team-row:last-child{border-bottom:none}
+.team-av{width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:#fff;flex-shrink:0}
+.team-info{flex:1;min-width:0}
+.team-name{font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.team-role{font-size:11px;color:var(--text3)}
+
+/* ══ PAGE : PLANNING EQUIPE ══ */
+.month-nav{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
+.month-nav-btn{width:36px;height:36px;border-radius:50%;background:var(--surface);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:16px;transition:all .2s}
+.month-nav-btn:active{background:var(--p1);color:#fff;border-color:var(--p1)}
+.month-title{font-size:16px;font-weight:700}
+
+.plan-table-wrap{overflow-x:auto;border-radius:var(--radius);box-shadow:var(--shadow);background:var(--surface)}
+table.pt{border-collapse:collapse;min-width:100%;font-size:11px}
+table.pt th{background:var(--p2);color:#fff;padding:8px 4px;text-align:center;font-weight:600;white-space:nowrap;position:sticky;top:0}
+table.pt th.nc{min-width:110px;text-align:left;padding:8px 10px;background:var(--p3);position:sticky;left:0;z-index:2}
+table.pt th.tc{min-width:44px;background:var(--p3);font-size:10px}
+table.pt td{border:1px solid #F1F5F9;text-align:center;padding:1px}
+table.pt td.en{text-align:left;padding:8px 10px;font-weight:600;font-size:11px;background:var(--bg);white-space:nowrap;position:sticky;left:0;z-index:1;border-right:2px solid var(--border)}
+table.pt td.tc{font-weight:700;font-size:11px;background:#EFF6FF;color:var(--p2)}
+.sc{width:32px;height:26px;border-radius:6px;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:10px;margin:2px;transition:transform .1s}
+.sc.editable{cursor:pointer}.sc.editable:active{transform:scale(1.2)}
+.me-row td.en{background:#EFF6FF;border-left:3px solid var(--p1)}
+
+/* Legend pills */
+.legend{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px}
+
+/* ══ PAGE : RÉCLAMATIONS ══ */
+.recl-card{padding:14px;border-bottom:1px solid var(--border)}
+.recl-card:last-child{border-bottom:none}
+.recl-header{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:6px}
+.recl-type{font-size:13px;font-weight:700;flex:1;margin-right:8px}
+.recl-meta{font-size:11px;color:var(--text3);margin-bottom:6px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.recl-obs{font-size:12px;color:var(--text2);background:var(--bg);border-radius:8px;padding:8px 10px;margin-top:6px}
+.recl-actions{display:flex;gap:6px;margin-top:8px;flex-wrap:wrap}
+
+/* ══ PAGE : REMPLACEMENTS ══ */
+.remp-card{padding:14px;border-bottom:1px solid var(--border)}
+.remp-card:last-child{border-bottom:none}
+.remp-swap{display:flex;align-items:center;gap:8px;margin:8px 0}
+.remp-person{flex:1;background:var(--bg);border-radius:8px;padding:8px 10px;text-align:center}
+.remp-person .rp-name{font-size:12px;font-weight:700}
+.remp-person .rp-shift{font-size:11px;color:var(--text3);margin-top:2px}
+.remp-arrow{font-size:20px;color:var(--text3)}
+.admin-actions{display:flex;gap:8px;margin-top:10px}
+
+/* ══ PAGE : PROFIL ══ */
+.profil-hero{
+  background:linear-gradient(135deg,var(--p1),var(--p3));
+  border-radius:var(--radius);padding:24px;text-align:center;
+  color:#fff;margin-bottom:16px;box-shadow:var(--shadow-lg);
+}
+.profil-av{width:72px;height:72px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:24px;font-weight:800;color:#fff;margin:0 auto 12px;border:3px solid rgba(255,255,255,.4)}
+.profil-name{font-size:20px;font-weight:800}
+.profil-role{font-size:13px;opacity:.75;margin-top:4px}
+.profil-badge{display:inline-block;background:rgba(255,255,255,.2);border-radius:20px;padding:4px 14px;font-size:12px;font-weight:600;margin-top:10px}
+
+/* Menu items */
+.menu-item{display:flex;align-items:center;gap:12px;padding:14px 16px;border-bottom:1px solid var(--border);cursor:pointer;transition:background .15s}
+.menu-item:last-child{border-bottom:none}
+.menu-item:active{background:var(--bg)}
+.menu-icon{width:36px;height:36px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0}
+.menu-label{flex:1;font-size:14px;font-weight:500}
+.menu-arrow{color:var(--text3);font-size:16px}
+
+/* ══ SHEET (bottom drawer) ══ */
+.sheet-overlay{position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:200;opacity:0;pointer-events:none;transition:opacity .3s}
+.sheet-overlay.open{opacity:1;pointer-events:all}
+.sheet{
+  position:fixed;bottom:0;left:0;right:0;z-index:201;
+  background:var(--surface);border-radius:20px 20px 0 0;
+  padding:0 16px max(16px,env(safe-area-inset-bottom));
+  transform:translateY(100%);transition:transform .35s cubic-bezier(.32,.72,0,1);
+  max-height:92vh;overflow-y:auto;
+}
+.sheet.open{transform:translateY(0)}
+.sheet-handle{width:40px;height:4px;background:var(--border);border-radius:2px;margin:12px auto 16px}
+.sheet-title{font-size:17px;font-weight:800;margin-bottom:18px;letter-spacing:-.3px}
+
+/* ══ ADMIN PANEL ══ */
+.admin-section{background:var(--surface);border-radius:var(--radius);box-shadow:var(--shadow);overflow:hidden;margin-bottom:12px}
+.admin-section-title{font-size:13px;font-weight:700;padding:12px 14px;border-bottom:1px solid var(--border);color:var(--text2);background:var(--bg)}
+.admin-emp-item{display:flex;align-items:center;gap:10px;padding:12px 14px;border-bottom:1px solid var(--border)}
+.admin-emp-item:last-child{border-bottom:none}
+.aei-info{flex:1;min-width:0}
+.aei-name{font-size:13px;font-weight:600;display:flex;align-items:center;gap:5px}
+.aei-sub{font-size:11px;color:var(--text3);margin-top:2px}
+.aei-acts{display:flex;gap:6px}
+
+/* ══ TOAST ══ */
+.toast{
+  position:fixed;bottom:80px;left:50%;transform:translateX(-50%) translateY(20px);
+  background:var(--text);color:#fff;padding:10px 18px;border-radius:20px;
+  font-size:13px;font-weight:500;white-space:nowrap;
+  opacity:0;transition:all .3s;z-index:500;pointer-events:none;
+  box-shadow:0 8px 24px rgba(0,0,0,.25);
+}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+
+/* ══ READONLY BANNER ══ */
+.ro-banner{
+  background:#FEF3C7;border-radius:var(--radius-sm);padding:10px 13px;
+  display:flex;align-items:center;gap:8px;font-size:12px;font-weight:500;
+  color:#92400E;margin-bottom:12px;border:1px solid #FDE68A;
+}
+
+/* ══ EMPTY STATE ══ */
+.empty-state{text-align:center;padding:48px 24px;color:var(--text3)}
+.empty-state .ei{font-size:48px;margin-bottom:12px}
+.empty-state p{font-size:14px;line-height:1.5}
+
+/* SCROLLBAR */
+::-webkit-scrollbar{width:0;height:0}
+.active-filter{background:var(--p1)!important;color:#fff!important}
+
+@media(min-width:480px){
+  .emp-grid{grid-template-columns:repeat(4,1fr)}
+}
+</style>
+</head>
+<body>
+
+<!-- ══ SPLASH / LOGIN ══ -->
+<div id="splash">
+  <div class="splash-logo">📅</div>
+  <div class="splash-title">Shift Planning</div>
+  <div class="splash-sub">Gestion d'équipe & planning des shifts</div>
+
+  <!-- Grille employés -->
+  <div id="phase-grid">
+    <div class="phase-label">Qui êtes-vous ?</div>
+    <div class="emp-grid" id="emp-grid"></div>
+  </div>
+
+  <!-- Saisie PIN -->
+  <div id="phase-pin">
+    <button class="back-btn" onclick="backToGrid()">◀ Retour</button>
+    <div class="selected-card">
+      <div class="sav" id="sel-av"></div>
+      <div>
+        <div class="sn" id="sel-name"></div>
+        <div class="sr" id="sel-role"></div>
+      </div>
+    </div>
+    <div class="phase-label">Votre code PIN</div>
+    <div class="dots">
+      <div class="dot" id="d0"></div><div class="dot" id="d1"></div>
+      <div class="dot" id="d2"></div><div class="dot" id="d3"></div>
+    </div>
+    <div class="numpad">
+      <button class="key" onclick="pk('1')">1</button>
+      <button class="key" onclick="pk('2')">2</button>
+      <button class="key" onclick="pk('3')">3</button>
+      <button class="key" onclick="pk('4')">4</button>
+      <button class="key" onclick="pk('5')">5</button>
+      <button class="key" onclick="pk('6')">6</button>
+      <button class="key" onclick="pk('7')">7</button>
+      <button class="key" onclick="pk('8')">8</button>
+      <button class="key" onclick="pk('9')">9</button>
+      <button class="key" onclick="pk('0')">0</button>
+      <button class="key del" onclick="pd()">⌫</button>
+    </div>
+    <div class="pin-err" id="pin-err"></div>
+    <div class="pin-hint">PIN admin par défaut : 1234</div>
+  </div>
+</div>
+
+<!-- ══ APP ══ -->
+<div id="app">
+  <div class="top-bar">
+    <div class="logo">📅</div>
+    <div class="app-name">Shift Planning</div>
+    <div class="sync-pill" id="sync-pill" title="Mode local — Cliquez pour configurer Supabase">
+      <span class="sync-dot" id="sync-dot"></span>
+      <span id="sync-label">Local</span>
+    </div>
+    <div class="user-chip" onclick="goPage('profil')">
+      <div class="uc-av" id="uc-av"></div>
+      <div class="uc-name" id="uc-name"></div>
+    </div>
+  </div>
+
+  <div class="scroll-area">
+    <!-- PAGE MON PLANNING -->
+    <div class="page active" id="page-home">
+      <div id="hero-block"></div>
+      <div class="section-label">Ma semaine</div>
+      <div class="week-strip" id="week-strip"></div>
+      <div class="section-label">L'équipe aujourd'hui</div>
+      <div class="card"><div class="card-pad" id="team-today"></div></div>
+    </div>
+
+    <!-- PAGE PLANNING ÉQUIPE -->
+    <div class="page" id="page-planning">
+      <div class="month-nav">
+        <button class="month-nav-btn" onclick="chMonth(-1)">◀</button>
+        <div class="month-title" id="month-title"></div>
+        <button class="month-nav-btn" onclick="chMonth(1)">▶</button>
+      </div>
+      <div class="legend" id="legend"></div>
+      <div id="ro-banner-planning"></div>
+      <div class="plan-table-wrap">
+        <table class="pt" id="plan-table"></table>
+      </div>
+      <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn btn-outline btn-sm" onclick="exportPDF()">🖨️ Imprimer / PDF</button>
+      </div>
+    </div>
+
+    <!-- PAGE RÉCLAMATIONS -->
+    <div class="page" id="page-reclamations">
+      <!-- Dashboard visuel -->
+      <div id="recl-dashboard" style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px"></div>
+
+      <button class="btn btn-primary btn-full" onclick="openSheet('sheet-recl')" style="margin-bottom:12px">
+        ➕ Nouvelle réclamation
+      </button>
+
+      <!-- Filtres statut -->
+      <div style="font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.6px;margin-bottom:6px">Statut</div>
+      <div style="display:flex;gap:6px;margin-bottom:10px;overflow-x:auto;padding-bottom:4px;scrollbar-width:none">
+        <button class="btn btn-sm rf-btn active-filter" onclick="setReclFilter('statut','',this)" style="flex-shrink:0">Toutes</button>
+        <button class="btn btn-ghost btn-sm rf-btn" onclick="setReclFilter('statut','En attente',this)" style="flex-shrink:0">⏳ En attente</button>
+        <button class="btn btn-ghost btn-sm rf-btn" onclick="setReclFilter('statut','En cours',this)" style="flex-shrink:0">🔄 En cours</button>
+        <button class="btn btn-ghost btn-sm rf-btn" onclick="setReclFilter('statut','Terminé',this)" style="flex-shrink:0">✅ Terminé</button>
+        <button class="btn btn-ghost btn-sm rf-btn" onclick="setReclFilter('statut','Escaladé',this)" style="flex-shrink:0">🚨 Escaladé</button>
+      </div>
+
+      <!-- Filtres priorité -->
+      <div style="font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.6px;margin-bottom:6px">Priorité</div>
+      <div style="display:flex;gap:6px;margin-bottom:14px;overflow-x:auto;padding-bottom:4px;scrollbar-width:none">
+        <button class="btn btn-sm rp-btn active-filter" onclick="setReclFilter('priorite','',this)" style="flex-shrink:0">Toutes</button>
+        <button class="btn btn-ghost btn-sm rp-btn" onclick="setReclFilter('priorite','Urgente',this)" style="flex-shrink:0">🔴 Urgente</button>
+        <button class="btn btn-ghost btn-sm rp-btn" onclick="setReclFilter('priorite','Normale',this)" style="flex-shrink:0">🟡 Normale</button>
+        <button class="btn btn-ghost btn-sm rp-btn" onclick="setReclFilter('priorite','Faible',this)" style="flex-shrink:0">🟢 Faible</button>
+      </div>
+
+      <div class="card" style="padding:0">
+        <div id="recl-list"></div>
+      </div>
+      <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn btn-ghost btn-sm" onclick="exportReclCSV('all')">📥 CSV</button>
+        <button class="btn btn-ghost btn-sm" onclick="exportReclPDF('all')">📄 PDF</button>
+      </div>
+    </div>
+
+    <!-- PAGE REMPLACEMENTS -->
+    <div class="page" id="page-remplacements">
+      <button class="btn btn-primary btn-full" onclick="openSheet('sheet-remp')" style="margin-bottom:16px">
+        🔄 Demander un remplacement
+      </button>
+      <div style="display:flex;gap:8px;margin-bottom:12px;overflow-x:auto;padding-bottom:4px;scrollbar-width:none">
+        <button class="btn btn-sm" id="rmf-all" onclick="setRempFilter('',this)" style="background:var(--p1);color:#fff;flex-shrink:0">Toutes</button>
+        <button class="btn btn-ghost btn-sm" onclick="setRempFilter('En attente',this)" style="flex-shrink:0">⏳ En attente</button>
+        <button class="btn btn-ghost btn-sm" onclick="setRempFilter('Approuvé',this)"  style="flex-shrink:0">✅ Approuvés</button>
+        <button class="btn btn-ghost btn-sm" onclick="setRempFilter('Refusé',this)"    style="flex-shrink:0">❌ Refusés</button>
+      </div>
+      <div class="card" style="padding:0"><div id="remp-list"></div></div>
+    </div>
+
+    <!-- PAGE PROFIL -->
+    <div class="page" id="page-profil">
+      <div class="profil-hero" id="profil-hero"></div>
+      <div class="card" style="padding:0">
+        <div class="menu-item" onclick="openSheet('sheet-pin')">
+          <div class="menu-icon" style="background:#EFF6FF">🔑</div>
+          <div class="menu-label">Changer mon PIN</div>
+          <div class="menu-arrow">›</div>
+        </div>
+        <div class="menu-item admin-only" onclick="testWA()" style="display:none">
+          <div class="menu-icon" style="background:#F0FDF4">💬</div>
+          <div class="menu-label">Tester la notification WhatsApp</div>
+          <div class="menu-arrow">›</div>
+        </div>
+        <div class="menu-item admin-only" onclick="openSheet('sheet-admin')" style="display:none">
+          <div class="menu-icon" style="background:#FEF3C7">⚙️</div>
+          <div class="menu-label">Administration</div>
+          <div class="menu-arrow">›</div>
+        </div>
+        <div class="menu-item admin-only" onclick="openSheet('sheet-shifts')" style="display:none">
+          <div class="menu-icon" style="background:#F0FDF4">⏰</div>
+          <div class="menu-label">Configurer les shifts</div>
+          <div class="menu-arrow">›</div>
+        </div>
+        <div class="menu-item admin-only" onclick="openSheet('sheet-rotation')" style="display:none">
+          <div class="menu-icon" style="background:#F5F3FF">🔁</div>
+          <div class="menu-label">Rotation automatique</div>
+          <div class="menu-arrow">›</div>
+        </div>
+        <div class="menu-item admin-only" onclick="openSheet('sheet-supabase')" style="display:none">
+          <div class="menu-icon" style="background:#ECFDF5">☁️</div>
+          <div class="menu-label">Configuration Supabase</div>
+          <div class="menu-arrow">›</div>
+        </div>
+        <div class="menu-item" onclick="openSheet('sheet-about')">
+          <div class="menu-icon" style="background:#F0F9FF">ℹ️</div>
+          <div class="menu-label">À propos</div>
+          <div class="menu-arrow">›</div>
+        </div>
+        <div class="menu-item" onclick="confirmLogout()">
+          <div class="menu-icon" style="background:#FEE2E2">🚪</div>
+          <div class="menu-label" style="color:var(--red)">Se déconnecter</div>
+          <div class="menu-arrow">›</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Bottom Nav -->
+  <div class="bot-nav">
+    <button class="nav-item active" id="nav-home"         onclick="goPage('home')">
+      <div class="ni">🏠</div><div class="nl">Accueil</div>
+    </button>
+    <button class="nav-item" id="nav-planning"            onclick="goPage('planning')">
+      <div class="ni">📅</div><div class="nl">Planning</div>
+    </button>
+    <button class="nav-item" id="nav-reclamations"        onclick="goPage('reclamations')" style="position:relative">
+      <div class="ni">📋</div><div class="nl">Réclamations</div>
+      <div class="nav-badge" id="badge-recl" style="display:none"></div>
+    </button>
+    <button class="nav-item" id="nav-remplacements"       onclick="goPage('remplacements')">
+      <div class="ni">🔄</div><div class="nl">Remplacements</div>
+    </button>
+    <button class="nav-item" id="nav-profil"              onclick="goPage('profil')">
+      <div class="ni">👤</div><div class="nl">Profil</div>
+    </button>
+  </div>
+</div>
+
+<!-- ══ SHEETS ══ -->
+
+<!-- Sheet : Nouvelle réclamation -->
+<div class="sheet-overlay" id="ov-sheet-recl" onclick="closeSheet('sheet-recl')"></div>
+<div class="sheet" id="sheet-recl">
+  <div class="sheet-handle"></div>
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+    <div class="sheet-title" style="margin-bottom:0">Nouvelle réclamation</div>
+    <button onclick="closeSheet('sheet-recl')" style="background:var(--bg);border:1px solid var(--border);border-radius:20px;padding:5px 14px;font-size:13px;font-weight:600;cursor:pointer;color:var(--text2);font-family:'Inter',sans-serif">✕ Fermer</button>
+  </div>
+  <div class="inp-group">
+    <label>Nom du plaignant *</label>
+    <input type="text" id="r-patient" placeholder="Nom et prénom">
+  </div>
+  <div class="inp-group">
+    <label>Type de réclamation *</label>
+    <select id="r-type">
+      <option value="">— Sélectionner —</option>
+      <optgroup label="Remboursement">
+        <option>Remboursement refusé</option>
+        <option>Délai de remboursement trop long</option>
+        <option>Montant remboursé insuffisant</option>
+        <option>Dossier de remboursement perdu</option>
+        <option>Erreur sur le montant remboursé</option>
+      </optgroup>
+      <optgroup label="Prise en charge">
+        <option>Refus de prise en charge</option>
+        <option>Prestataire non conventionné</option>
+        <option>Médicament non pris en charge</option>
+        <option>Acte médical non couvert</option>
+        <option>Plafond de remboursement atteint</option>
+      </optgroup>
+      <optgroup label="Affiliation & Carte">
+        <option>Carte d'assuré non reçue</option>
+        <option>Erreur sur la carte d'assuré</option>
+        <option>Problème d'immatriculation</option>
+        <option>Ayant droit non enregistré</option>
+        <option>Radiation injustifiée</option>
+      </optgroup>
+      <optgroup label="Cotisation">
+        <option>Cotisation mal prélevée</option>
+        <option>Double prélèvement</option>
+        <option>Erreur sur la fiche de paie</option>
+      </optgroup>
+      <optgroup label="Service">
+        <option>Mauvais accueil</option>
+        <option>Délai de traitement trop long</option>
+        <option>Manque d'information</option>
+        <option>Problème de communication</option>
+      </optgroup>
+      <option>Autre</option>
+    </select>
+  </div>
+  <div class="inp-row">
+    <div class="inp-group">
+      <label>Responsable *</label>
+      <select id="r-resp"></select>
+    </div>
+    <div class="inp-group" style="max-width:130px">
+      <label>Priorité</label>
+      <select id="r-priorite">
+        <option value="Normale">🟡 Normale</option>
+        <option value="Urgente">🔴 Urgente</option>
+        <option value="Faible">🟢 Faible</option>
+      </select>
+    </div>
+  </div>
+  <div class="inp-group">
+    <label>Observations</label>
+    <textarea id="r-obs" placeholder="Détails supplémentaires..."></textarea>
+  </div>
+  <div class="inp-group">
+    <label>Pièce jointe (optionnel)</label>
+    <div style="display:flex;gap:8px;align-items:center">
+      <button class="btn btn-ghost btn-sm" onclick="document.getElementById('r-file').click()" type="button">📎 Joindre un fichier</button>
+      <span id="r-file-name" style="font-size:12px;color:var(--text2);font-style:italic">Aucun fichier</span>
+    </div>
+    <input type="file" id="r-file" style="display:none" onchange="showFileName()">
+  </div>
+  <div style="display:flex;gap:8px">
+    <button class="btn btn-primary" style="flex:1" onclick="addReclamation()">✔ Enregistrer</button>
+    <button class="btn btn-wa btn-sm" onclick="notifyWA()">💬 WA</button>
+  </div>
+</div>
+
+<!-- Sheet : Demande remplacement -->
+<div class="sheet-overlay" id="ov-sheet-remp" onclick="closeSheet('sheet-remp')"></div>
+<div class="sheet" id="sheet-remp">
+  <div class="sheet-handle"></div>
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+    <div class="sheet-title" style="margin-bottom:0">Demande de remplacement</div>
+    <button onclick="closeSheet('sheet-remp')" style="background:var(--bg);border:1px solid var(--border);border-radius:20px;padding:5px 14px;font-size:13px;font-weight:600;cursor:pointer;color:var(--text2);font-family:'Inter',sans-serif">✕ Fermer</button>
+  </div>
+  <div class="inp-row">
+    <div class="inp-group">
+      <label>Ma date *</label>
+      <input type="date" id="rm-ma-date" onchange="updateShifts()">
+    </div>
+    <div class="inp-group" style="max-width:110px">
+      <label>Mon shift</label>
+      <input type="text" id="rm-mon-shift" readonly style="background:var(--bg);font-weight:700;text-align:center">
+    </div>
+  </div>
+  <div class="inp-group">
+    <label>Collègue *</label>
+    <select id="rm-collegue" onchange="updateShifts()"></select>
+  </div>
+  <div class="inp-row">
+    <div class="inp-group">
+      <label>Date collègue *</label>
+      <input type="date" id="rm-col-date" onchange="updateShifts()">
+    </div>
+    <div class="inp-group" style="max-width:110px">
+      <label>Shift collègue</label>
+      <input type="text" id="rm-col-shift" readonly style="background:var(--bg);font-weight:700;text-align:center">
+    </div>
+  </div>
+  <div class="inp-group">
+    <label>Motif</label>
+    <textarea id="rm-motif" placeholder="Rendez-vous médical, événement familial..."></textarea>
+  </div>
+  <button class="btn btn-primary btn-full" onclick="demanderRemp()">📤 Envoyer la demande</button>
+</div>
+
+<!-- Sheet : Changer PIN -->
+<div class="sheet-overlay" id="ov-sheet-pin" onclick="closeSheet('sheet-pin')"></div>
+<div class="sheet" id="sheet-pin">
+  <div class="sheet-handle"></div>
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+    <div class="sheet-title" style="margin-bottom:0">Changer mon PIN</div>
+    <button onclick="closeSheet('sheet-pin')" style="background:var(--bg);border:1px solid var(--border);border-radius:20px;padding:5px 14px;font-size:13px;font-weight:600;cursor:pointer;color:var(--text2);font-family:'Inter',sans-serif">✕ Fermer</button>
+  </div>
+  <div class="inp-group">
+    <label>Nouveau PIN (4 chiffres)</label>
+    <input type="password" id="new-pin" maxlength="4" placeholder="••••" style="letter-spacing:6px;font-size:22px;text-align:center">
+  </div>
+  <div class="inp-group">
+    <label>Confirmer le PIN</label>
+    <input type="password" id="confirm-pin" maxlength="4" placeholder="••••" style="letter-spacing:6px;font-size:22px;text-align:center">
+  </div>
+  <button class="btn btn-primary btn-full" onclick="changeMyPin()">🔑 Enregistrer</button>
+</div>
+
+<!-- Sheet : Administration -->
+<div class="sheet-overlay" id="ov-sheet-admin" onclick="closeSheet('sheet-admin')"></div>
+<div class="sheet" id="sheet-admin">
+  <div class="sheet-handle"></div>
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+    <div class="sheet-title" style="margin-bottom:0">Gestion du personnel</div>
+    <button onclick="closeSheet('sheet-admin')" style="background:var(--bg);border:1px solid var(--border);border-radius:20px;padding:5px 14px;font-size:13px;font-weight:600;cursor:pointer;color:var(--text2);font-family:'Inter',sans-serif">✕ Fermer</button>
+  </div>
+  <div class="inp-group">
+    <label>Nom complet *</label>
+    <input type="text" id="a-nom" placeholder="Ex : Koné Aminata">
+  </div>
+  <div class="inp-row">
+    <div class="inp-group">
+      <label>Rôle</label>
+      <input type="text" id="a-role" placeholder="Agent, Superviseur...">
+    </div>
+    <div class="inp-group" style="max-width:110px">
+      <label>PIN</label>
+      <input type="text" id="a-pin" maxlength="4" placeholder="0000" style="letter-spacing:4px;font-size:16px;text-align:center">
+    </div>
+  </div>
+  <div class="inp-row">
+    <div class="inp-group">
+      <label>Shift défaut</label>
+      <select id="a-shift"></select>
+    </div>
+    <div class="inp-group">
+      <label>Groupe rotation</label>
+      <select id="a-groupe">
+        <option value="">— Aucun —</option>
+        <option value="A">🔵 Groupe A</option>
+        <option value="B">🟠 Groupe B</option>
+        <option value="C">🟣 Groupe C</option>
+      </select>
+    </div>
+  </div>
+  <div class="inp-group">
+    <label>WhatsApp</label>
+    <input type="text" id="a-wa" placeholder="+2250769030128">
+  </div>
+  <div style="display:flex;flex-direction:column;gap:10px;margin-bottom:16px">
+    <div style="display:flex;align-items:center;gap:10px">
+      <label style="position:relative;display:inline-block;width:40px;height:22px;flex-shrink:0">
+        <input type="checkbox" id="a-admin" style="opacity:0;width:0;height:0">
+        <span style="position:absolute;inset:0;background:#ccc;border-radius:22px;cursor:pointer;transition:.3s" id="a-admin-slider"></span>
+      </label>
+      <span style="font-size:13px;font-weight:500">👑 Administrateur</span>
+    </div>
+    <div style="display:flex;align-items:center;gap:10px">
+      <label style="position:relative;display:inline-block;width:40px;height:22px;flex-shrink:0">
+        <input type="checkbox" id="a-fixed" style="opacity:0;width:0;height:0" onchange="document.getElementById('a-fixed-slider').style.background=this.checked?'#F59E0B':'#ccc'">
+        <span style="position:absolute;inset:0;background:#ccc;border-radius:22px;cursor:pointer;transition:.3s" id="a-fixed-slider"></span>
+      </label>
+      <span style="font-size:13px;font-weight:500">☀️ Personnel Fixe Matin <span style="font-size:11px;color:var(--text3)">(ne tourne jamais)</span></span>
+    </div>
+  </div>
+  <button class="btn btn-primary btn-full" onclick="addEmployee()" style="margin-bottom:10px">➕ Ajouter</button>
+  <button class="btn btn-outline btn-full" onclick="closeSheet('sheet-admin');openSheet('sheet-cycle')" style="margin-bottom:16px">⚡ Générer un cycle automatique</button>
+  <div style="font-size:12px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px">Membres de l'équipe</div>
+  <div id="admin-emp-list"></div>
+</div>
+
+<!-- Sheet : Shifts config -->
+<div class="sheet-overlay" id="ov-sheet-shifts" onclick="closeSheet('sheet-shifts')"></div>
+<div class="sheet" id="sheet-shifts">
+  <div class="sheet-handle"></div>
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+    <div class="sheet-title" style="margin-bottom:0">Configuration des shifts</div>
+    <button onclick="closeSheet('sheet-shifts')" style="background:var(--bg);border:1px solid var(--border);border-radius:20px;padding:5px 14px;font-size:13px;font-weight:600;cursor:pointer;color:var(--text2);font-family:'Inter',sans-serif">✕ Fermer</button>
+  </div>
+  <div id="shift-cfg-list"></div>
+  <button class="btn btn-primary btn-full" onclick="saveShifts()">💾 Enregistrer</button>
+</div>
+
+<!-- Sheet : Cycle automatique (Module 2) -->
+<div class="sheet-overlay" id="ov-sheet-cycle" onclick="closeSheet('sheet-cycle')"></div>
+<div class="sheet" id="sheet-cycle">
+  <div class="sheet-handle"></div>
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+    <div class="sheet-title" style="margin-bottom:0">⚡ Générateur de cycle</div>
+    <button onclick="closeSheet('sheet-cycle')" style="background:var(--bg);border:1px solid var(--border);border-radius:20px;padding:5px 14px;font-size:13px;font-weight:600;cursor:pointer;color:var(--text2);font-family:'Inter',sans-serif">✕ Fermer</button>
+  </div>
+
+  <!-- Membre -->
+  <div class="inp-group">
+    <label>Membre concerné *</label>
+    <select id="cy-emp" onchange="previewCycle()">
+      <option value="">— Sélectionner —</option>
+    </select>
+  </div>
+
+  <!-- Modèles prédéfinis -->
+  <div style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">Modèles rapides</div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px">
+    <button class="btn btn-ghost btn-sm" onclick="applyTemplate(['M','M','S','S','N','N','R','R'])">2M·2S·2N·2R</button>
+    <button class="btn btn-ghost btn-sm" onclick="applyTemplate(['M','M','M','S','S','S','N','N','N','R','R','R'])">3M·3S·3N·3R</button>
+    <button class="btn btn-ghost btn-sm" onclick="applyTemplate(['M','S','N','R'])">1M·1S·1N·1R</button>
+    <button class="btn btn-ghost btn-sm" onclick="applyTemplate(['M','M','R','S','S','R','N','N','R'])">2+Repos intercalé</button>
+    <button class="btn btn-ghost btn-sm" onclick="applyTemplate(['M','M','M','M','M','R','R'])">5M·2R (semaine)</button>
+    <button class="btn btn-ghost btn-sm" onclick="applyTemplate(['N','N','N','N','N','R','R'])">5N·2R (nuit seule)</button>
+  </div>
+
+  <!-- Constructeur manuel -->
+  <div style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">Ou construisez votre séquence</div>
+  <div style="background:var(--bg);border-radius:var(--radius-sm);padding:12px;margin-bottom:10px">
+    <div id="cy-sequence" style="display:flex;gap:6px;flex-wrap:wrap;min-height:36px;margin-bottom:10px"></div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap">
+      <button class="btn btn-sm" onclick="addSeq('M')" style="background:var(--M);color:var(--Mfg)">+ Matin</button>
+      <button class="btn btn-sm" onclick="addSeq('S')" style="background:var(--S);color:var(--Sfg)">+ Soir</button>
+      <button class="btn btn-sm" onclick="addSeq('N')" style="background:var(--N);color:var(--Nfg)">+ Nuit</button>
+      <button class="btn btn-sm" onclick="addSeq('R')" style="background:var(--R);color:var(--Rfg)">+ Repos</button>
+      <button class="btn btn-ghost btn-sm" onclick="resetSeq()">✖</button>
+    </div>
+  </div>
+
+  <!-- Période -->
+  <div class="inp-row">
+    <div class="inp-group">
+      <label>Date de début *</label>
+      <input type="date" id="cy-start" onchange="previewCycle()">
+    </div>
+    <div class="inp-group">
+      <label>Générer pour</label>
+      <select id="cy-months" onchange="previewCycle()">
+        <option value="1" selected>1 mois</option>
+        <option value="2">2 mois</option>
+        <option value="3">3 mois</option>
+        <option value="6">6 mois</option>
+      </select>
+    </div>
+  </div>
+
+  <!-- Aperçu -->
+  <div id="cy-preview" style="display:none;margin-bottom:12px">
+    <div style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">Aperçu — 14 premiers jours</div>
+    <div id="cy-preview-strip" style="display:flex;gap:4px;flex-wrap:wrap"></div>
+    <div id="cy-preview-stats" style="font-size:12px;color:var(--text2);margin-top:8px"></div>
+  </div>
+
+  <!-- Alerte sécurité -->
+  <div id="cy-warning" style="display:none;background:#FEF3C7;border-radius:10px;padding:10px 12px;font-size:12px;color:#92400E;margin-bottom:12px;border:1px solid #FDE68A">
+    ⚠️ <strong>Sécurité</strong> — Des transitions Nuit→Matin ont été détectées et corrigées automatiquement (Matin remplacé par Repos).
+  </div>
+
+  <button class="btn btn-primary btn-full" onclick="applyCycle()">⚡ Appliquer sur tout le mois</button>
+</div>
+
+<!-- Sheet : Rotation -->
+<div class="sheet-overlay" id="ov-sheet-rotation" onclick="closeSheet('sheet-rotation')"></div>
+<div class="sheet" id="sheet-rotation">
+  <div class="sheet-handle"></div>
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+    <div class="sheet-title" style="margin-bottom:0">🔁 Génération automatique</div>
+    <button onclick="closeSheet('sheet-rotation')" style="background:var(--bg);border:1px solid var(--border);border-radius:20px;padding:5px 14px;font-size:13px;font-weight:600;cursor:pointer;color:var(--text2);font-family:'Inter',sans-serif">✕ Fermer</button>
+  </div>
+
+  <!-- Mode 7+1 -->
+  <div style="background:linear-gradient(135deg,#EFF6FF,#DBEAFE);border-radius:var(--radius-sm);padding:14px;margin-bottom:16px;border:1.5px solid #BFDBFE">
+    <div style="font-weight:700;font-size:14px;color:var(--p2);margin-bottom:6px">⭐ Mode équipe 8 (7 rotation + 1 fixe)</div>
+    <div style="font-size:12px;color:var(--text2);line-height:1.6;margin-bottom:10px">
+      Cycle 8 jours <strong>MM·SS·NN·RR</strong> décalé pour les 7 tournants.<br>
+      Le fixe reste toujours en <strong>Matin</strong>.<br>
+      Garantit : 2 personnes le matin, 1-2 sur les autres shifts.
+    </div>
+    <div style="font-size:11px;color:var(--text3);margin-bottom:12px">
+      ☀️ Fixe détecté : <strong id="rot-fixed-name">—</strong><br>
+      🔄 Tournants détectés : <strong id="rot-rotating-count">—</strong>
+    </div>
+    <div class="inp-row" style="margin-bottom:10px">
+      <div class="inp-group">
+        <label>Date de début *</label>
+        <input type="date" id="rot-start" onchange="updateRotationPreview()">
+      </div>
+      <div class="inp-group">
+        <label>Générer pour</label>
+        <select id="rot-months" onchange="updateRotationPreview()">
+          <option value="1">1 mois</option>
+          <option value="3" selected>3 mois</option>
+          <option value="6">6 mois</option>
+          <option value="12">12 mois</option>
+        </select>
+      </div>
+    </div>
+    <!-- Aperçu couverture -->
+    <div id="rot-coverage" style="display:none;margin-bottom:10px;font-size:11px;color:var(--text2)"></div>
+    <button class="btn btn-primary btn-full" onclick="applyRotation()">⚡ Générer pour toute l'équipe</button>
+  </div>
+
+  <button class="btn btn-ghost btn-full btn-sm" onclick="resetPlanning()">⚠️ Réinitialiser le planning</button>
+</div>
+
+<!-- Sheet : Configuration Supabase -->
+<div class="sheet-overlay" id="ov-sheet-supabase" onclick="closeSheet('sheet-supabase')"></div>
+<div class="sheet" id="sheet-supabase">
+  <div class="sheet-handle"></div>
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+    <div class="sheet-title" style="margin-bottom:0">☁️ Configuration Supabase</div>
+    <button onclick="closeSheet('sheet-supabase')" style="background:var(--bg);border:1px solid var(--border);border-radius:20px;padding:5px 14px;font-size:13px;font-weight:600;cursor:pointer;color:var(--text2);font-family:'Inter',sans-serif">✕ Fermer</button>
+  </div>
+
+  <!-- Statut actuel -->
+  <div id="sb-status-card" style="background:var(--bg);border-radius:12px;padding:14px;margin-bottom:16px;border:1.5px solid var(--border)">
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+      <div id="sb-status-dot" style="width:10px;height:10px;border-radius:50%;background:#94A3B8"></div>
+      <strong id="sb-status-title" style="font-size:14px">Mode local</strong>
+    </div>
+    <div id="sb-status-desc" style="font-size:12px;color:var(--text2);line-height:1.5">
+      Les données sont stockées uniquement sur cet appareil. Configurez Supabase pour synchroniser entre tous les utilisateurs.
+    </div>
+  </div>
+
+  <!-- Étape 1 : SQL à exécuter -->
+  <div style="font-size:12px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">📋 Étape 1 — Créer les tables</div>
+  <div style="font-size:12px;color:var(--text2);margin-bottom:8px;line-height:1.5">
+    Allez dans le <strong>SQL Editor</strong> de votre projet Supabase, copiez-collez ce script puis exécutez-le.
+  </div>
+  <button class="btn btn-outline btn-full btn-sm" onclick="copySQLSchema()" style="margin-bottom:10px">📋 Copier le script SQL</button>
+  <details style="margin-bottom:16px">
+    <summary style="cursor:pointer;font-size:12px;color:var(--p2);font-weight:600;margin-bottom:6px">Voir le script SQL</summary>
+    <div class="code-block" id="sql-schema"></div>
+  </details>
+
+  <!-- Étape 2 : URL & Clé -->
+  <div style="font-size:12px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">🔑 Étape 2 — Vos identifiants</div>
+  <div style="font-size:12px;color:var(--text2);margin-bottom:10px;line-height:1.5">
+    Trouvez ces valeurs dans <strong>Settings › API</strong> de votre projet Supabase.
+  </div>
+  <div class="inp-group">
+    <label>URL du projet</label>
+    <input type="text" id="sb-url" placeholder="https://xxxx.supabase.co">
+  </div>
+  <div class="inp-group">
+    <label>Clé anon (publique)</label>
+    <input type="text" id="sb-key" placeholder="eyJhbGc..." style="font-family:Monaco,monospace;font-size:11px">
+  </div>
+
+  <button class="btn btn-primary btn-full" onclick="testAndSaveSupabase()" style="margin-bottom:10px">🔌 Tester & connecter</button>
+
+  <!-- Étape 3 : Migration -->
+  <div id="sb-migration-block" style="display:none;background:#FEF3C7;border-radius:12px;padding:14px;margin-bottom:12px;border:1.5px solid #FDE68A">
+    <div style="font-weight:700;font-size:13px;color:#92400E;margin-bottom:6px">📤 Étape 3 — Importer vos données locales</div>
+    <div style="font-size:12px;color:#92400E;line-height:1.5;margin-bottom:10px">
+      Vous avez des données locales. Importez-les vers Supabase pour les rendre accessibles à toute l'équipe.
+    </div>
+    <button class="btn btn-primary btn-full btn-sm" onclick="migrateLocalToCloud()">⬆️ Importer vers Supabase</button>
+  </div>
+
+  <!-- Actions -->
+  <div id="sb-actions-block" style="display:none">
+    <div style="font-size:12px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin:14px 0 8px">⚙️ Actions</div>
+    <button class="btn btn-ghost btn-full btn-sm" onclick="resyncFromCloud()" style="margin-bottom:8px">🔄 Resynchroniser depuis le cloud</button>
+    <button class="btn btn-danger btn-full btn-sm" onclick="disconnectSupabase()">🔌 Se déconnecter du cloud</button>
+  </div>
+</div>
+
+<!-- Sheet : À propos -->
+<div class="sheet-overlay" id="ov-sheet-about" onclick="closeSheet('sheet-about')"></div>
+<div class="sheet" id="sheet-about">
+  <div class="sheet-handle"></div>
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+    <div class="sheet-title" style="margin-bottom:0">ℹ️ À propos</div>
+    <button onclick="closeSheet('sheet-about')" style="background:var(--bg);border:1px solid var(--border);border-radius:20px;padding:5px 14px;font-size:13px;font-weight:600;cursor:pointer;color:var(--text2);font-family:'Inter',sans-serif">✕ Fermer</button>
+  </div>
+  <div style="text-align:center;padding:20px 0">
+    <div style="font-size:48px;margin-bottom:10px">📅</div>
+    <div style="font-size:20px;font-weight:800;color:var(--p2);margin-bottom:4px">Shift Planning</div>
+    <div style="font-size:13px;color:var(--text2);margin-bottom:20px">Version 1.0 — Mode <span id="ab-mode">local</span></div>
+  </div>
+  <div class="card" style="padding:14px;margin-bottom:10px">
+    <div style="font-size:12px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">Fonctionnalités</div>
+    <div style="font-size:13px;line-height:1.7;color:var(--text)">
+      📅 Planning d'équipe avec rotations automatiques<br>
+      🔄 Demandes de remplacement entre collègues<br>
+      📋 Gestion des réclamations<br>
+      💬 Notifications WhatsApp<br>
+      ☁️ Synchronisation cloud avec Supabase<br>
+      🖨️ Export PDF et CSV
+    </div>
+  </div>
+  <div class="card" style="padding:14px">
+    <div style="font-size:12px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">Stockage</div>
+    <div id="ab-storage-info" style="font-size:12px;line-height:1.6;color:var(--text2)"></div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ══════════════════════════════════════
+// STORAGE LOCAL (localStorage)
+// ══════════════════════════════════════
+const S={
+  get:(k,d)=>{try{const v=localStorage.getItem(k);return v?JSON.parse(v):d}catch{return d}},
+  set:(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v));return true}catch(e){console.warn('localStorage indisponible:',e?.message||e);return false}},
+  remove:k=>{try{localStorage.removeItem(k);return true}catch{return false}}
+};
+
+// ══════════════════════════════════════
+// CLOUD LAYER — SUPABASE
+// ══════════════════════════════════════
+let supabase = null;          // Instance Supabase
+let cloudMode = false;        // True si connecté au cloud
+let syncInProgress = false;   // Sync en cours
+let realtimeChannels = [];    // Subscriptions actives
+
+// Récupère la config Supabase stockée localement
+function getSbConfig(){
+  return {
+    url: S.get('sp_sb_url',''),
+    key: S.get('sp_sb_key','')
+  };
+}
+
+// Initialise la connexion Supabase si configurée
+async function initSupabase(){
+  const {url,key}=getSbConfig();
+  if(!url||!key){setSyncStatus('local');return false;}
+  try{
+    setSyncStatus('syncing','Connexion...');
+    // Attendre le SDK : 20 secondes max
+    let waited=0;
+    while(window._sbSdkStatus==='loading'&&waited<20000){
+      await new Promise(r=>setTimeout(r,300));
+      waited+=300;
+    }
+    if(window._sbSdkStatus==='failed'||typeof window.supabase==='undefined'){
+      console.error('SDK Supabase indisponible');
+      setSyncStatus('error','SDK manquant');
+      window._sbLastError='Impossible de charger le SDK Supabase depuis aucun CDN.\n\nCauses possibles :\n• Réseau lent ou bloqué par votre opérateur (essayez en Wi-Fi)\n• Adblock/VPN qui bloque les CDN\n• Pare-feu d\'entreprise';
+      return false;
+    }
+    console.log('SDK chargé depuis:',window._sbSdkSource);
+    supabase=window.supabase.createClient(url,key,{
+      auth:{persistSession:false},
+      realtime:{params:{eventsPerSecond:5}}
+    });
+    // Test de connexion : compter les shifts
+    const {error}=await supabase.from('sp_shifts').select('code',{count:'exact',head:true});
+    if(error){
+      window._sbLastError=error.message||JSON.stringify(error);
+      throw error;
+    }
+    cloudMode=true;
+    setSyncStatus('cloud','Cloud');
+    window._sbLastError='';
+    return true;
+  }catch(e){
+    console.error('Erreur Supabase:',e);
+    cloudMode=false;
+    setSyncStatus('error','Erreur');
+    window._sbLastError=e?.message||String(e);
+    return false;
+  }
+}
+
+// Met à jour l'indicateur de statut dans le header
+function setSyncStatus(state,label){
+  const pill=document.getElementById('sync-pill');
+  const lbl=document.getElementById('sync-label');
+  if(!pill||!lbl)return;
+  pill.classList.remove('local','cloud','syncing','error');
+  pill.classList.add(state);
+  lbl.textContent=label||{local:'Local',cloud:'Cloud',syncing:'Sync...',error:'Erreur'}[state]||state;
+  pill.title={
+    local:'Mode local — Cliquez pour configurer Supabase',
+    cloud:'Synchronisé avec Supabase',
+    syncing:'Synchronisation en cours...',
+    error:'Erreur de connexion — Cliquez pour reconfigurer'
+  }[state]||'';
+}
+
+// Charge toutes les données depuis le cloud
+async function loadFromCloud(){
+  if(!cloudMode||!supabase)return false;
+  try{
+    setSyncStatus('syncing','Chargement...');
+    const [empRes,shRes,planRes,reclRes,rempRes]=await Promise.all([
+      supabase.from('sp_employees').select('*').order('ordre',{ascending:true}),
+      supabase.from('sp_shifts').select('*').order('ordre',{ascending:true}),
+      supabase.from('sp_plan').select('*'),
+      supabase.from('sp_reclamations').select('*').order('created_at',{ascending:false}),
+      supabase.from('sp_remplacements').select('*').order('created_at',{ascending:false})
+    ]);
+    if(empRes.error)throw empRes.error;
+    if(shRes.error)throw shRes.error;
+    if(planRes.error)throw planRes.error;
+    if(reclRes.error)throw reclRes.error;
+    if(rempRes.error)throw rempRes.error;
+
+    // Employés
+    if(empRes.data&&empRes.data.length){
+      employees=empRes.data.map(e=>({
+        id:e.id,nom:e.nom,role:e.role||'',shiftDef:e.shift_def||'M',
+        groupe:e.groupe||'',wa:e.wa||'',pin:e.pin||'0000',
+        isAdmin:!!e.is_admin,isFixed:!!e.is_fixed
+      }));
+      S.set('sc_employees',employees);
+    }
+    // Shifts
+    if(shRes.data&&shRes.data.length){
+      shifts=shRes.data.map(s=>({
+        code:s.code,label:s.label,debut:s.debut||'',fin:s.fin||'',
+        heures:s.heures||0,bg:s.bg||'#E2E8F0',fg:s.fg||'#475569'
+      }));
+      S.set('sc_shifts',shifts);
+    }
+    // Plan : reconstruire l'objet planData avec les indices
+    planData={};
+    if(planRes.data){
+      planRes.data.forEach(row=>{
+        const ei=employees.findIndex(e=>e.id===row.employee_id);
+        if(ei<0)return;
+        const [y,m,d]=row.jour.split('-').map(Number);
+        planData[`${y}-${m-1}-${d}-${ei}`]=row.shift_code;
+      });
+      S.set('sc_plan',planData);
+    }
+    // Réclamations
+    if(reclRes.data){
+      reclamations=reclRes.data.map(r=>({
+        id:r.id,date:r.date_str,saisiePar:r.saisie_par,patient:r.patient,
+        type:r.type,pharm:r.pharm,priorite:r.priorite||'Normale',
+        statut:r.statut||'En attente',obs:r.obs||'',attachment:r.attachment||''
+      }));
+      S.set('sc_recl',reclamations);
+    }
+    // Remplacements
+    if(rempRes.data){
+      remplacements=rempRes.data.map(r=>{
+        const dIdx=employees.findIndex(e=>e.id===r.demandeur_id);
+        const cIdx=employees.findIndex(e=>e.id===r.collegue_id);
+        return{
+          id:r.id,date:r.date_str,demandeur:r.demandeur,demandeurIdx:dIdx,
+          maDate:r.ma_date,monShift:r.mon_shift,collegue:r.collegue,
+          collegueIdx:cIdx,colDate:r.col_date,colShift:r.col_shift,
+          motif:r.motif||'',statut:r.statut||'En attente',
+          approuvePar:r.approuve_par||'',motifRefus:r.motif_refus||''
+        };
+      });
+      S.set('sc_remp',remplacements);
+    }
+    setSyncStatus('cloud','Cloud');
+    return true;
+  }catch(e){
+    console.error('loadFromCloud:',e);
+    setSyncStatus('error','Erreur');
+    toast('⚠️ Erreur de chargement cloud — mode local activé');
+    cloudMode=false;
+    return false;
+  }
+}
+
+// S'abonne aux changements en temps réel
+function subscribeRealtime(){
+  if(!cloudMode||!supabase)return;
+  // Nettoyer les anciennes subscriptions
+  realtimeChannels.forEach(ch=>{try{supabase.removeChannel(ch);}catch{}});
+  realtimeChannels=[];
+
+  const tables=['sp_employees','sp_shifts','sp_plan','sp_reclamations','sp_remplacements'];
+  tables.forEach(table=>{
+    const ch=supabase.channel(`rt-${table}`)
+      .on('postgres_changes',{event:'*',schema:'public',table},payload=>{
+        // Ignorer nos propres changements (anti-écho)
+        if(payload.commit_timestamp&&Date.now()-new Date(payload.commit_timestamp).getTime()<300){
+          // Skip si trop récent (probablement nous)
+        }
+        // Recharger silencieusement (debounced)
+        debouncedReload();
+      })
+      .subscribe();
+    realtimeChannels.push(ch);
+  });
+}
+
+let _reloadTimer=null;
+function debouncedReload(){
+  if(_reloadTimer)clearTimeout(_reloadTimer);
+  _reloadTimer=setTimeout(async()=>{
+    if(!cloudMode)return;
+    await loadFromCloud();
+    // Re-render la page active
+    const active=document.querySelector('.page.active');
+    if(active){
+      const id=active.id.replace('page-','');
+      if(id==='home')renderHome();
+      else if(id==='planning')renderPlanning();
+      else if(id==='reclamations')renderReclamations();
+      else if(id==='remplacements')renderRemplacements();
+    }
+    refreshSelects();updateBadgeRecl();
+  },500);
+}
+
+// ══════════════════════════════════════
+// CLOUD WRITES — Synchronisation des changements
+// ══════════════════════════════════════
+
+// Pousse un employé vers le cloud (insert ou update)
+async function cloudUpsertEmployee(emp){
+  if(!cloudMode||!supabase||!emp.id)return;
+  try{
+    const{error}=await supabase.from('sp_employees').upsert({
+      id:emp.id,nom:emp.nom,role:emp.role||'',shift_def:emp.shiftDef||'M',
+      groupe:emp.groupe||'',wa:emp.wa||'',pin:emp.pin||'0000',
+      is_admin:!!emp.isAdmin,is_fixed:!!emp.isFixed,
+      ordre:employees.findIndex(e=>e.id===emp.id)
+    },{onConflict:'id'});
+    if(error)throw error;
+  }catch(e){console.error('cloudUpsertEmployee:',e);toast('⚠️ Erreur sync employé');}
+}
+
+async function cloudDeleteEmployee(id){
+  if(!cloudMode||!supabase||!id)return;
+  try{await supabase.from('sp_employees').delete().eq('id',id);}
+  catch(e){console.error('cloudDeleteEmployee:',e);}
+}
+
+async function cloudSaveShifts(){
+  if(!cloudMode||!supabase)return;
+  try{
+    const rows=shifts.map((s,i)=>({
+      code:s.code,label:s.label,debut:s.debut||'',fin:s.fin||'',
+      heures:s.heures||0,bg:s.bg,fg:s.fg,ordre:i
+    }));
+    const{error}=await supabase.from('sp_shifts').upsert(rows,{onConflict:'code'});
+    if(error)throw error;
+  }catch(e){console.error('cloudSaveShifts:',e);toast('⚠️ Erreur sync shifts');}
+}
+
+async function cloudSetPlan(y,m,d,ei,code){
+  if(!cloudMode||!supabase)return;
+  const emp=employees[ei];
+  if(!emp?.id)return;
+  try{
+    const jour=`${y}-${String(m+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+    const{error}=await supabase.from('sp_plan').upsert({
+      jour,employee_id:emp.id,shift_code:code,updated_at:new Date().toISOString()
+    },{onConflict:'jour,employee_id'});
+    if(error)throw error;
+  }catch(e){console.error('cloudSetPlan:',e);}
+}
+
+async function cloudBulkSetPlan(entries){
+  if(!cloudMode||!supabase||!entries.length)return;
+  try{
+    setSyncStatus('syncing','Envoi planning...');
+    // Découpage en lots de 500
+    for(let i=0;i<entries.length;i+=500){
+      const batch=entries.slice(i,i+500);
+      const{error}=await supabase.from('sp_plan').upsert(batch,{onConflict:'jour,employee_id'});
+      if(error)throw error;
+    }
+    setSyncStatus('cloud','Cloud');
+  }catch(e){
+    console.error('cloudBulkSetPlan:',e);
+    setSyncStatus('error','Erreur');
+    toast('⚠️ Erreur sync planning');
+  }
+}
+
+async function cloudUpsertReclamation(rec){
+  if(!cloudMode||!supabase)return;
+  try{
+    const{error}=await supabase.from('sp_reclamations').upsert({
+      id:rec.id,date_str:rec.date,saisie_par:rec.saisiePar,patient:rec.patient,
+      type:rec.type,pharm:rec.pharm,priorite:rec.priorite,statut:rec.statut,
+      obs:rec.obs||'',attachment:rec.attachment||''
+    },{onConflict:'id'});
+    if(error)throw error;
+  }catch(e){console.error('cloudUpsertReclamation:',e);}
+}
+
+async function cloudDeleteReclamation(id){
+  if(!cloudMode||!supabase)return;
+  try{await supabase.from('sp_reclamations').delete().eq('id',id);}
+  catch(e){console.error('cloudDeleteReclamation:',e);}
+}
+
+async function cloudUpsertRemplacement(dem){
+  if(!cloudMode||!supabase)return;
+  try{
+    const dEmp=employees[dem.demandeurIdx];
+    const cEmp=employees[dem.collegueIdx];
+    const{error}=await supabase.from('sp_remplacements').upsert({
+      id:dem.id,date_str:dem.date,demandeur:dem.demandeur,
+      demandeur_id:dEmp?.id||null,ma_date:dem.maDate,mon_shift:dem.monShift,
+      collegue:dem.collegue,collegue_id:cEmp?.id||null,
+      col_date:dem.colDate,col_shift:dem.colShift,
+      motif:dem.motif||'',statut:dem.statut,
+      approuve_par:dem.approuvePar||'',motif_refus:dem.motifRefus||''
+    },{onConflict:'id'});
+    if(error)throw error;
+  }catch(e){console.error('cloudUpsertRemplacement:',e);}
+}
+
+// Upload une pièce jointe vers Supabase Storage
+async function cloudUploadAttachment(file){
+  if(!cloudMode||!supabase||!file)return null;
+  try{
+    const ext=file.name.split('.').pop();
+    const path=`recl-${Date.now()}-${Math.random().toString(36).slice(2,8)}.${ext}`;
+    const{data,error}=await supabase.storage.from('shift-planning-files').upload(path,file,{
+      cacheControl:'3600',upsert:false
+    });
+    if(error)throw error;
+    const{data:urlData}=supabase.storage.from('shift-planning-files').getPublicUrl(path);
+    return{name:file.name,url:urlData?.publicUrl||'',path};
+  }catch(e){
+    console.error('cloudUploadAttachment:',e);
+    toast('⚠️ Erreur upload fichier');
+    return null;
+  }
+}
+
+// ══════════════════════════════════════
+// HELPERS UUID
+// ══════════════════════════════════════
+function uuid(){
+  try{if(crypto?.randomUUID)return crypto.randomUUID();}catch{}
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g,c=>{
+    const r=Math.random()*16|0;return(c==='x'?r:(r&0x3|0x8)).toString(16);
+  });
+}
+
+// ══════════════════════════════════════
+// STATE
+// ══════════════════════════════════════
+let employees   = S.get('sc_employees',[
+  {id:uuid(),nom:'Administrateur',role:'Admin',shiftDef:'M',groupe:'A',wa:'',pin:'1234',isAdmin:true}
+]);
+let shifts      = S.get('sc_shifts',[
+  {code:'M',label:'Matin', debut:'06:00',fin:'14:00',heures:8,bg:'#FDE68A',fg:'#92400E'},
+  {code:'S',label:'Soir',  debut:'14:00',fin:'22:00',heures:8,bg:'#BAE6FD',fg:'#075985'},
+  {code:'N',label:'Nuit',  debut:'22:00',fin:'06:00',heures:8,bg:'#DDD6FE',fg:'#5B21B6'},
+  {code:'C',label:'Congé', debut:'',     fin:'',     heures:0,bg:'#FCA5A5',fg:'#991B1B'},
+  {code:'R',label:'Repos', debut:'',     fin:'',     heures:0,bg:'#E2E8F0',fg:'#475569'}
+]);
+let planData    = S.get('sc_plan',{});
+let reclamations= S.get('sc_recl',[]);
+let remplacements=S.get('sc_remp',[]);
+let waNum       = S.get('sc_wa','');
+let currentUser = null;
+let selIdx      = null;
+let pinInput    = '';
+let curYear=new Date().getFullYear(), curMonth=new Date().getMonth();
+let rempFilter='';
+
+const MOIS=['Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'];
+const JOURS=['Dim','Lun','Mar','Mer','Jeu','Ven','Sam'];
+const CYCLE_8J = ['M','M','S','S','N','N','R','R'];
+
+// FILET DE SÉCURITÉ : si les données chargées sont vides ou cassées, on reseed
+if(!Array.isArray(employees)||employees.length===0){
+  console.warn('Liste employés vide/corrompue → réinitialisation avec admin par défaut');
+  employees=[{id:uuid(),nom:'Administrateur',role:'Admin',shiftDef:'M',groupe:'A',wa:'',pin:'1234',isAdmin:true}];
+  S.set('sc_employees',employees);
+}
+if(!Array.isArray(shifts)||shifts.length<5){
+  console.warn('Liste shifts vide/corrompue → réinitialisation');
+  shifts=[
+    {code:'M',label:'Matin', debut:'06:00',fin:'14:00',heures:8,bg:'#FDE68A',fg:'#92400E'},
+    {code:'S',label:'Soir',  debut:'14:00',fin:'22:00',heures:8,bg:'#BAE6FD',fg:'#075985'},
+    {code:'N',label:'Nuit',  debut:'22:00',fin:'06:00',heures:8,bg:'#DDD6FE',fg:'#5B21B6'},
+    {code:'C',label:'Congé', debut:'',     fin:'',     heures:0,bg:'#FCA5A5',fg:'#991B1B'},
+    {code:'R',label:'Repos', debut:'',     fin:'',     heures:0,bg:'#E2E8F0',fg:'#475569'}
+  ];
+  S.set('sc_shifts',shifts);
+}
+
+// Migration v2 → v3 (ajout UUID)
+(()=>{
+  const ver=S.get('sc_ver','');
+  if(ver!=='v2'&&ver!=='v3'){
+    employees=employees.map(e=>({pin:'0000',isAdmin:false,groupe:'',wa:'',isFixed:false,...e}));
+    S.set('sc_ver','v2');
+  }
+  if(S.get('sc_ver','')!=='v3'){
+    // Ajouter un id UUID à chaque employé qui n'en a pas
+    let needSave=false;
+    employees=employees.map(e=>{
+      if(!e.id){needSave=true;return{...e,id:uuid()};}
+      return e;
+    });
+    if(needSave)S.set('sc_employees',employees);
+    S.set('sc_ver','v3');
+  }
+})();
+
+// ══════════════════════════════════════
+// HELPERS
+// ══════════════════════════════════════
+const isAdmin=()=>currentUser?.isAdmin;
+const shiftOf=c=>shifts.find(s=>s.code===c)||shifts[4];
+const daysInMonth=(y,m)=>new Date(y,m+1,0).getDate();
+const initials=n=>n.trim().split(' ').filter(Boolean).map(w=>w[0].toUpperCase()).join('').slice(0,2);
+const parseDate=v=>{const[y,m,d]=v.split('-').map(Number);return{y,m:m-1,d}};
+const fmtDate=d=>d.toLocaleDateString('fr-FR');
+
+function toast(msg,dur=2800){
+  const t=document.getElementById('toast');
+  t.textContent=msg;t.classList.add('show');
+  clearTimeout(t._t);t._t=setTimeout(()=>t.classList.remove('show'),dur);
+}
+
+function getShift(y,m,d,ei){
+  const k=`${y}-${m}-${d}-${ei}`;
+  if(planData[k]!==undefined)return planData[k];
+  const emp=employees[ei];
+  // Employé fixe → toujours Matin
+  if(emp?.isFixed)return'M';
+  // Rotation automatique 8 jours
+  const rotStart=S.get('sc_rotStart','');
+  if(rotStart){
+    const start=new Date(rotStart);start.setHours(0,0,0,0);
+    const dt=new Date(y,m,d);
+    const diff=Math.floor((dt-start)/86400000);
+    if(diff>=0){
+      // Calculer l'index tournant de cet employé (parmi les non-fixes)
+      const rotatingEmps=employees.filter(e=>!e.isFixed);
+      const rotIdx=rotatingEmps.findIndex(e=>e.nom===emp?.nom);
+      if(rotIdx>=0){
+        return CYCLE_8J[(diff+rotIdx)%8];
+      }
+    }
+  }
+  return emp?.shiftDef||'M';
+}
+
+function cycleShift(y,m,d,ei){
+  if(!isAdmin()){toast('🔒 Seul un admin peut modifier le planning.');return;}
+  const c=getShift(y,m,d,ei);
+  const codes=shifts.map(s=>s.code);
+  const newCode=codes[(codes.indexOf(c)+1)%codes.length];
+  planData[`${y}-${m}-${d}-${ei}`]=newCode;
+  S.set('sc_plan',planData);renderPlanning();
+  cloudSetPlan(y,m,d,ei,newCode);
+}
+
+// ══════════════════════════════════════
+// LOGIN
+// ══════════════════════════════════════
+function renderEmpGrid(){
+  const grid=document.getElementById('emp-grid');
+  if(!grid)return;
+  if(!Array.isArray(employees)||employees.length===0){
+    grid.innerHTML='<div style="color:#fff;text-align:center;padding:20px;font-size:13px;background:rgba(255,255,255,.1);border-radius:12px">Aucun utilisateur trouvé.<br><button onclick="resetAllData()" style="margin-top:10px;background:#fff;color:#0EA5E9;border:none;padding:8px 14px;border-radius:8px;font-weight:700;font-size:12px">🔄 Réinitialiser</button></div>';
+    return;
+  }
+  grid.innerHTML=employees.map((e,i)=>{
+    const sh=shiftOf(e.shiftDef);
+    return`<div class="emp-card${e.isAdmin?' is-admin':''}" onclick="selEmp(${i})">
+      <div class="av" style="background:${sh.fg}">${initials(e.nom)}</div>
+      <div class="en">${e.nom}${e.isAdmin?' 👑':''}</div>
+      <div class="er">${e.role||''}</div>
+    </div>`;
+  }).join('');
+}
+
+// Réinitialisation totale (recovery)
+function resetAllData(){
+  if(!confirm('Effacer toutes les données locales et recommencer ?\n\n(Tes données cloud Supabase ne sont pas affectées.)'))return;
+  try{
+    ['sc_employees','sc_shifts','sc_plan','sc_recl','sc_remp','sc_wa','sc_ver','sc_rotStart'].forEach(k=>S.remove(k));
+  }catch{}
+  location.reload();
+}
+
+function selEmp(i){
+  selIdx=i;const e=employees[i];const sh=shiftOf(e.shiftDef);
+  document.getElementById('sel-av').style.background=sh.fg;
+  document.getElementById('sel-av').textContent=initials(e.nom);
+  document.getElementById('sel-name').textContent=e.nom+(e.isAdmin?' 👑':'');
+  document.getElementById('sel-role').textContent=e.role||'';
+  document.getElementById('phase-grid').style.display='none';
+  document.getElementById('phase-pin').style.display='block';
+  pinInput='';updateDots();document.getElementById('pin-err').textContent='';
+}
+
+function backToGrid(){
+  document.getElementById('phase-pin').style.display='none';
+  document.getElementById('phase-grid').style.display='block';
+  pinInput='';updateDots();
+}
+
+function pk(d){if(pinInput.length>=4)return;pinInput+=d;updateDots();if(pinInput.length===4)setTimeout(checkPin,120);}
+function pd(){pinInput=pinInput.slice(0,-1);updateDots();}
+function updateDots(){for(let i=0;i<4;i++)document.getElementById('d'+i).classList.toggle('on',i<pinInput.length);}
+
+function checkPin(){
+  const e=employees[selIdx];
+  if(pinInput===(e.pin||'0000')){
+    currentUser={...e,idx:selIdx};
+    document.getElementById('splash').classList.add('hide');
+    setTimeout(()=>{document.getElementById('splash').style.display='none';document.getElementById('app').classList.add('show');},400);
+    initApp();
+  } else {
+    document.getElementById('pin-err').textContent='PIN incorrect. Réessayez.';
+    pinInput='';updateDots();
+    setTimeout(()=>document.getElementById('pin-err').textContent='',2500);
+  }
+}
+
+function confirmLogout(){
+  if(confirm('Se déconnecter ?')){
+    currentUser=null;selIdx=null;pinInput='';
+    document.getElementById('app').classList.remove('show');
+    const sp=document.getElementById('splash');
+    sp.style.display='flex';sp.classList.remove('hide');
+    document.getElementById('phase-pin').style.display='none';
+    document.getElementById('phase-grid').style.display='block';
+    updateDots();renderEmpGrid();
+  }
+}
+
+// ══════════════════════════════════════
+// NAVIGATION
+// ══════════════════════════════════════
+function goPage(id){
+  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(b=>b.classList.remove('active'));
+  document.getElementById('page-'+id).classList.add('active');
+  const nb=document.getElementById('nav-'+id);
+  if(nb)nb.classList.add('active');
+  if(id==='home')renderHome();
+  if(id==='planning')renderPlanning();
+  if(id==='reclamations')renderReclamations();
+  if(id==='remplacements')renderRemplacements();
+  if(id==='profil')renderProfil();
+}
+
+// ══════════════════════════════════════
+// HOME — MON PLANNING
+// ══════════════════════════════════════
+function renderHome(){
+  const now=new Date();
+  const todayCode=getShift(now.getFullYear(),now.getMonth(),now.getDate(),currentUser.idx);
+  const todaySh=shiftOf(todayCode);
+  // Hero
+  const nextCode=getShift(now.getFullYear(),now.getMonth(),now.getDate()+1,currentUser.idx);
+  const nextSh=shiftOf(nextCode);
+  document.getElementById('hero-block').innerHTML=`
+    <div class="hero-shift">
+      <div class="hero-date">${now.toLocaleDateString('fr-FR',{weekday:'long',day:'numeric',month:'long'})}</div>
+      <div class="hero-name">Bonjour, ${currentUser.nom.split(' ')[0]} ${currentUser.isAdmin?'👑':''}</div>
+      <div class="hero-shift-badge">
+        <span style="background:${todaySh.bg};color:${todaySh.fg};border-radius:8px;padding:4px 10px;font-size:13px">${todaySh.code}</span>
+        ${todayCode==='R'?'Repos aujourd\'hui 😴':todayCode==='C'?'En congé 🏖️':`${todaySh.label} · ${todaySh.debut}–${todaySh.fin}`}
+      </div>
+      <div class="hero-next">Demain : <strong>${nextSh.label}${nextSh.debut?' ('+nextSh.debut+'-'+nextSh.fin+')':''}</strong></div>
+    </div>`;
+
+  // Week strip
+  const strip=document.getElementById('week-strip');
+  strip.innerHTML='';
+  for(let i=-1;i<=7;i++){
+    const dt=new Date(now);dt.setDate(now.getDate()+i);
+    const code=getShift(dt.getFullYear(),dt.getMonth(),dt.getDate(),currentUser.idx);
+    const sh=shiftOf(code);
+    const isT=i===0;
+    const el=document.createElement('div');
+    el.className='week-day'+(isT?' today':'');
+    el.innerHTML=`<div class="wd-label">${JOURS[dt.getDay()]}</div><div class="wd-num">${dt.getDate()}</div><div class="wd-shift" style="background:${sh.bg};color:${sh.fg}">${sh.code}</div>`;
+    strip.appendChild(el);
+    if(isT)el.scrollIntoView({inline:'center',behavior:'instant'});
+  }
+
+  // Équipe aujourd'hui
+  const teamDiv=document.getElementById('team-today');
+  const todayTeam=employees.map((e,i)=>({e,i,code:getShift(now.getFullYear(),now.getMonth(),now.getDate(),i)}))
+    .filter(({code})=>code!=='R'&&code!=='C');
+  if(!todayTeam.length){teamDiv.innerHTML=`<div style="text-align:center;padding:20px;color:var(--text3);font-size:13px">Aucun membre en service aujourd'hui.</div>`;return;}
+  teamDiv.innerHTML=todayTeam.map(({e,i,code})=>{
+    const sh=shiftOf(code);
+    return`<div class="team-row">
+      <div class="team-av" style="background:${sh.fg}">${initials(e.nom)}</div>
+      <div class="team-info"><div class="team-name">${e.nom}${i===currentUser.idx?' (moi)':''}</div><div class="team-role">${e.role||''}</div></div>
+      <span class="pill pill-${code}">${sh.code} · ${sh.debut||sh.label}</span>
+    </div>`;
+  }).join('');
+}
+
+// ══════════════════════════════════════
+// PLANNING ÉQUIPE
+// ══════════════════════════════════════
+function renderPlanning(){
+  document.getElementById('month-title').textContent=`${MOIS[curMonth]} ${curYear}`;
+
+  // Legend
+  document.getElementById('legend').innerHTML=shifts.map(s=>
+    `<span class="pill" style="background:${s.bg};color:${s.fg}">${s.code} ${s.label}${s.debut?' '+s.debut:''}</span>`
+  ).join('');
+
+  // Readonly banner
+  document.getElementById('ro-banner-planning').innerHTML=isAdmin()?'':
+    `<div class="ro-banner">🔒 Lecture seule — Contactez un admin pour modifier</div>`;
+
+  const nb=daysInMonth(curYear,curMonth);
+  let html='<thead><tr><th class="nc">Membre</th>';
+  for(let d=1;d<=nb;d++){
+    const dt=new Date(curYear,curMonth,d);
+    html+=`<th>${d}<br><span style="font-size:9px;opacity:.7">${JOURS[dt.getDay()]}</span></th>`;
+  }
+  html+=`<th class="tc">Shifts</th><th class="tc">Heures</th></tr></thead><tbody>`;
+
+  employees.forEach((emp,pi)=>{
+    const isMe=pi===currentUser.idx;
+    html+=`<tr class="${isMe?'me-row':''}"><td class="en">${emp.nom}${emp.isAdmin?' 👑':''}</td>`;
+    let ts=0,th=0;
+    for(let d=1;d<=nb;d++){
+      const code=getShift(curYear,curMonth,d,pi);
+      const sh=shiftOf(code);
+      if(code!=='C'&&code!=='R'){ts++;th+=sh.heures||0;}
+      const edit=isAdmin();
+      html+=`<td style="padding:1px"><div class="sc${edit?' editable':''}" style="background:${sh.bg};color:${sh.fg}" ${edit?`onclick="cycleShift(${curYear},${curMonth},${d},${pi})"`:''}>${sh.code}</div></td>`;
+    }
+    html+=`<td class="tc">${ts}</td><td class="tc">${th}h</td></tr>`;
+  });
+
+  document.getElementById('plan-table').innerHTML=html+'</tbody>';
+}
+
+function chMonth(d){curMonth+=d;if(curMonth>11){curMonth=0;curYear++;}if(curMonth<0){curMonth=11;curYear--;}renderPlanning();}
+
+// ══════════════════════════════════════
+// EMPLOYÉS (admin)
+// ══════════════════════════════════════
+function renderAdminEmpList(){
+  const el=document.getElementById('admin-emp-list');
+  if(!el)return;
+  if(!employees.length){el.innerHTML=`<div style="text-align:center;padding:20px;color:var(--text3);font-size:13px">Aucun membre.</div>`;return;}
+  el.innerHTML=employees.map((e,i)=>{
+    const sh=shiftOf(e.shiftDef);
+    return`<div class="admin-emp-item">
+      <div class="team-av" style="background:${sh.fg};width:36px;height:36px;font-size:12px">${initials(e.nom)}</div>
+      <div class="aei-info">
+        <div class="aei-name">${e.nom}${e.isAdmin?' 👑':''}${e.isFixed?' ☀️':''}</div>
+        <div class="aei-sub">${e.role||'Sans rôle'} · ${e.isFixed?'<strong>Fixe Matin</strong>':'Rotation '+sh.code} · ${e.wa||'Pas de WA'}</div>
+      </div>
+      <div class="aei-acts">
+        <button class="btn btn-ghost btn-sm" onclick="editEmployee(${i})" style="padding:5px 8px">✏️</button>
+        <button class="btn btn-danger btn-sm" onclick="deleteEmployee(${i})" style="padding:5px 8px">🗑</button>
+      </div>
+    </div>`;
+  }).join('');
+  refreshSelects();
+}
+
+function addEmployee(){
+  const nom=document.getElementById('a-nom').value.trim();
+  const role=document.getElementById('a-role').value.trim();
+  const shiftDef=document.getElementById('a-shift').value;
+  const groupe=document.getElementById('a-groupe').value;
+  const wa=document.getElementById('a-wa').value.trim();
+  const pin=(document.getElementById('a-pin').value.trim()||'0000');
+  const isAdm=document.getElementById('a-admin').checked;
+  const isFixed=document.getElementById('a-fixed').checked;
+  if(!nom){toast('⚠️ Nom obligatoire.');return;}
+  if(!/^\d{4}$/.test(pin)){toast('⚠️ PIN doit être 4 chiffres.');return;}
+  const newEmp={id:uuid(),nom,role,shiftDef:isFixed?'M':shiftDef,groupe:isFixed?'':groupe,wa,pin,isAdmin:isAdm,isFixed};
+  employees.push(newEmp);
+  S.set('sc_employees',employees);
+  cloudUpsertEmployee(newEmp);
+  ['a-nom','a-role','a-wa','a-pin'].forEach(id=>document.getElementById(id).value='');
+  document.getElementById('a-admin').checked=false;
+  document.getElementById('a-fixed').checked=false;
+  document.getElementById('a-admin-slider').style.background='#ccc';
+  document.getElementById('a-fixed-slider').style.background='#ccc';
+  document.getElementById('a-groupe').value='';
+  renderAdminEmpList();renderEmpGrid();
+  toast(`✅ ${nom} ajouté(e)${isFixed?' ☀️ Fixe Matin':''}.`);
+}
+
+function editEmployee(i){
+  const e=employees[i];
+  const nom=prompt('Nom complet :',e.nom);if(!nom)return;
+  const role=prompt('Rôle :',e.role)||'';
+  const wa=prompt('WhatsApp :',e.wa)||'';
+  const newpin=prompt('Nouveau PIN (vide = inchangé) :','');
+  const fixedStr=prompt(`☀️ Fixe Matin ? (oui/non) — actuellement : ${e.isFixed?'oui':'non'}`,e.isFixed?'oui':'non');
+  const isFixed=fixedStr?.toLowerCase()==='oui';
+  employees[i]={...e,nom,role,wa,isFixed,shiftDef:isFixed?'M':e.shiftDef,groupe:isFixed?'':e.groupe};
+  if(newpin&&/^\d{4}$/.test(newpin))employees[i].pin=newpin;
+  S.set('sc_employees',employees);
+  cloudUpsertEmployee(employees[i]);
+  renderAdminEmpList();renderEmpGrid();renderPlanning();
+  toast('✅ Mis à jour.');
+}
+
+function deleteEmployee(i){
+  if(i===currentUser.idx){toast('⚠️ Impossible de supprimer votre propre compte.');return;}
+  if(!confirm(`Supprimer ${employees[i].nom} ?`))return;
+  const removed=employees[i];
+  employees.splice(i,1);S.set('sc_employees',employees);
+  if(removed.id)cloudDeleteEmployee(removed.id);
+  if(currentUser.idx>i)currentUser.idx--;
+  renderAdminEmpList();renderEmpGrid();
+  toast('🗑️ Supprimé.');
+}
+
+// ══════════════════════════════════════
+// SHIFTS CONFIG
+// ══════════════════════════════════════
+function renderShiftsCfg(){
+  document.getElementById('shift-cfg-list').innerHTML=shifts.map((s,i)=>`
+    <div style="background:${s.bg}22;border-radius:12px;padding:12px;margin-bottom:10px;border:1.5px solid ${s.bg}">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+        <div style="width:12px;height:12px;border-radius:50%;background:${s.fg}"></div>
+        <input type="text" id="sh-lbl-${i}" value="${s.label}" style="font-weight:700;font-size:14px;border:none;background:transparent;color:${s.fg};font-family:'Inter',sans-serif;flex:1;outline:none">
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 80px;gap:8px">
+        <div><label style="font-size:10px;color:var(--text2)">Début</label><input type="time" id="sh-deb-${i}" value="${s.debut}" style="width:100%;padding:6px;border:1px solid var(--border);border-radius:8px;font-family:'Inter',sans-serif;font-size:13px"></div>
+        <div><label style="font-size:10px;color:var(--text2)">Fin</label><input type="time" id="sh-fin-${i}" value="${s.fin}" style="width:100%;padding:6px;border:1px solid var(--border);border-radius:8px;font-family:'Inter',sans-serif;font-size:13px"></div>
+        <div><label style="font-size:10px;color:var(--text2)">Durée</label><div style="display:flex;align-items:center;gap:3px"><input type="number" id="sh-h-${i}" value="${s.heures}" min="0" max="24" style="width:50px;padding:6px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:'Inter',sans-serif">h</div></div>
+      </div>
+    </div>`).join('')+`<div style="height:10px"></div>`;
+}
+
+function saveShifts(){
+  shifts.forEach((s,i)=>{
+    s.label=document.getElementById(`sh-lbl-${i}`).value.trim()||s.label;
+    s.debut=document.getElementById(`sh-deb-${i}`).value;
+    s.fin=document.getElementById(`sh-fin-${i}`).value;
+    s.heures=+document.getElementById(`sh-h-${i}`).value||0;
+  });
+  S.set('sc_shifts',shifts);refreshSelects();renderPlanning();closeSheet('sheet-shifts');
+  cloudSaveShifts();
+  toast('✅ Shifts enregistrés !');
+}
+
+// ══════════════════════════════════════
+// ROTATION
+// ══════════════════════════════════════
+function updateRotationPreview(){
+  const fixed=employees.filter(e=>e.isFixed);
+  const rotating=employees.filter(e=>!e.isFixed);
+  const fn=document.getElementById('rot-fixed-name');
+  const rc=document.getElementById('rot-rotating-count');
+  if(fn)fn.textContent=fixed.length?fixed.map(e=>e.nom).join(', '):'Aucun';
+  if(rc)rc.textContent=`${rotating.length} membre(s)`;
+  const startVal=document.getElementById('rot-start')?.value;
+  if(!startVal)return;
+  const cov={M:fixed.length,S:0,N:0,R:0};
+  rotating.forEach((_,i)=>{const c=CYCLE_8J[i%8];cov[c]=(cov[c]||0)+1;});
+  const cEl=document.getElementById('rot-coverage');
+  if(cEl){
+    cEl.style.display='block';
+    cEl.innerHTML=`Couverture type (Jour 1) : <strong style="color:var(--Mfg)">☀️${cov.M||0}M</strong> · <strong style="color:var(--Sfg)">🌆${cov.S||0}S</strong> · <strong style="color:var(--Nfg)">🌙${cov.N||0}N</strong> · <strong style="color:var(--Rfg)">😴${cov.R||0}R</strong>`;
+  }
+}
+
+function applyRotation(){
+  const startVal=document.getElementById('rot-start').value;
+  const months=+document.getElementById('rot-months').value;
+  if(!startVal){toast('⚠️ Choisissez une date de début.');return;}
+  const rotating=employees.filter(e=>!e.isFixed);
+  const fixed=employees.filter(e=>e.isFixed);
+  if(!rotating.length){toast('⚠️ Aucun membre en rotation.');return;}
+  if(!confirm(`Générer ${months} mois pour ${employees.length} membres ?\n(${fixed.length} fixe ☀️ + ${rotating.length} en rotation MM·SS·NN·RR)`))return;
+
+  S.set('sc_rotStart',startVal);
+  const start=new Date(startVal);start.setHours(0,0,0,0);
+  let count=0,conflicts=0;
+  const cloudEntries=[];
+
+  employees.forEach((emp,ei)=>{
+    const rotIdx=rotating.findIndex(e=>e.nom===emp.nom);
+    for(let mi=0;mi<months;mi++){
+      const y=new Date(start.getFullYear(),start.getMonth()+mi,1).getFullYear();
+      const m=new Date(start.getFullYear(),start.getMonth()+mi,1).getMonth();
+      const nb=daysInMonth(y,m);
+      for(let d=1;d<=nb;d++){
+        const dt=new Date(y,m,d);dt.setHours(0,0,0,0);
+        const diff=Math.floor((dt-start)/86400000);
+        if(diff<0)continue;
+        let code;
+        if(emp.isFixed){
+          code='M';
+        } else {
+          code=CYCLE_8J[(diff+rotIdx)%8];
+          if(code==='M'&&diff>0){
+            const prev=new Date(y,m,d-1);
+            const prevKey=`${prev.getFullYear()}-${prev.getMonth()}-${prev.getDate()}-${ei}`;
+            const prevCode=planData[prevKey]||CYCLE_8J[(diff-1+rotIdx)%8];
+            if(prevCode==='N'){code='R';conflicts++;}
+          }
+        }
+        planData[`${y}-${m}-${d}-${ei}`]=code;count++;
+        if(emp.id){
+          cloudEntries.push({
+            jour:`${y}-${String(m+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`,
+            employee_id:emp.id,shift_code:code,
+            updated_at:new Date().toISOString()
+          });
+        }
+      }
+    }
+  });
+
+  S.set('sc_plan',planData);closeSheet('sheet-rotation');renderPlanning();renderHome();
+  toast(conflicts?`✅ ${count} shifts générés (${conflicts} conflits N→M corrigés)`:
+    `✅ ${count} shifts générés pour ${employees.length} membres !`);
+  // Sync cloud en arrière-plan
+  if(cloudMode)cloudBulkSetPlan(cloudEntries);
+}
+
+function resetPlanning(){
+  if(!confirm('⚠️ Réinitialiser tout le planning local ? Irréversible.\n\nNote : ceci ne supprime pas les données du cloud Supabase. Pour cela, utilisez le SQL Editor.'))return;
+  planData={};S.set('sc_plan',planData);closeSheet('sheet-rotation');renderPlanning();
+  toast('🔄 Planning local réinitialisé.');
+}
+
+// ══════════════════════════════════════
+// MODULE 2 — GÉNÉRATEUR DE CYCLE
+// ══════════════════════════════════════
+let cycleSequence = [];
+
+function applyTemplate(seq){
+  cycleSequence=[...seq];
+  renderSeq();
+  previewCycle();
+}
+
+function addSeq(code){
+  cycleSequence.push(code);
+  renderSeq();
+  previewCycle();
+}
+function resetSeq(){
+  cycleSequence=[];
+  renderSeq();
+  document.getElementById('cy-preview').style.display='none';
+}
+
+function renderSeq(){
+  const sh_bg={M:'var(--M)',S:'var(--S)',N:'var(--N)',R:'var(--R)',C:'var(--C)'};
+  const sh_fg={M:'var(--Mfg)',S:'var(--Sfg)',N:'var(--Nfg)',R:'var(--Rfg)',C:'var(--Cfg)'};
+  const el=document.getElementById('cy-sequence');
+  if(!el)return;
+  if(!cycleSequence.length){
+    el.innerHTML=`<span style="font-size:12px;color:var(--text3);line-height:36px">Choisissez un modèle ou ajoutez des shifts...</span>`;
+    return;
+  }
+  el.innerHTML=cycleSequence.map((c,i)=>`
+    <div onclick="removeSeq(${i})" style="display:inline-flex;align-items:center;gap:4px;background:${sh_bg[c]};color:${sh_fg[c]};border-radius:8px;padding:5px 11px;font-size:12px;font-weight:700;cursor:pointer;transition:transform .1s" onmousedown="this.style.transform='scale(.92)'" onmouseup="this.style.transform=''">
+      ${c} <span style="font-size:10px;opacity:.6">✕</span>
+    </div>`).join('');
+}
+
+function removeSeq(i){
+  cycleSequence.splice(i,1);
+  renderSeq();
+  previewCycle();
+}
+
+function previewCycle(){
+  if(!cycleSequence.length)return;
+  const startVal=document.getElementById('cy-start').value;
+  if(!startVal)return;
+  const preview=document.getElementById('cy-preview');
+  const strip=document.getElementById('cy-preview-strip');
+  const stats=document.getElementById('cy-preview-stats');
+  if(!preview)return;
+
+  preview.style.display='block';
+  const start=new Date(startVal);start.setHours(0,0,0,0);
+  const sh_bg={M:'var(--M)',S:'var(--S)',N:'var(--N)',R:'var(--R)',C:'var(--C)'};
+  const sh_fg={M:'var(--Mfg)',S:'var(--Sfg)',N:'var(--Nfg)',R:'var(--Rfg)',C:'var(--Cfg)'};
+  const months=+document.getElementById('cy-months').value||1;
+
+  // Aperçu 14 jours
+  let stripHtml='';
+  for(let i=0;i<14;i++){
+    const dt=new Date(start);dt.setDate(start.getDate()+i);
+    const code=cycleSequence[i%cycleSequence.length];
+    const j=['D','L','M','M','J','V','S'][dt.getDay()];
+    stripHtml+=`<div style="text-align:center;min-width:36px">
+      <div style="font-size:9px;color:var(--text3);margin-bottom:3px">${j}${dt.getDate()}</div>
+      <div style="background:${sh_bg[code]};color:${sh_fg[code]};border-radius:8px;padding:5px 4px;font-size:11px;font-weight:700">${code}</div>
+    </div>`;
+  }
+  strip.innerHTML=stripHtml;
+
+  // Stats sur toute la période
+  const totalDays=months*30;
+  const count={M:0,S:0,N:0,R:0,C:0};
+  for(let i=0;i<totalDays;i++) count[cycleSequence[i%cycleSequence.length]]=(count[cycleSequence[i%cycleSequence.length]]||0)+1;
+  stats.innerHTML=`Sur ~${totalDays} jours : <strong>${count.M||0}M</strong> · <strong>${count.S||0}S</strong> · <strong>${count.N||0}N</strong> · <strong>${count.R||0}R</strong>`;
+}
+
+function applyCycle(){
+  const empIdx=document.getElementById('cy-emp').value;
+  const startVal=document.getElementById('cy-start').value;
+  const months=+document.getElementById('cy-months').value||1;
+
+  if(!cycleSequence.length){toast('⚠️ Définissez une séquence ou choisissez un modèle.');return;}
+  if(empIdx===''||empIdx===null){toast('⚠️ Sélectionnez un membre.');return;}
+  if(!startVal){toast('⚠️ Choisissez une date de début.');return;}
+
+  const ei=+empIdx;
+  const emp=employees[ei];
+  const start=new Date(startVal);start.setHours(0,0,0,0);
+  const seqLen=cycleSequence.length;
+  let count=0,conflicts=0;
+  const cloudEntries=[];
+
+  for(let mi=0;mi<months;mi++){
+    const y=new Date(start.getFullYear(),start.getMonth()+mi,1).getFullYear();
+    const m=new Date(start.getFullYear(),start.getMonth()+mi,1).getMonth();
+    const nb=daysInMonth(y,m);
+    for(let d=1;d<=nb;d++){
+      const dt=new Date(y,m,d);dt.setHours(0,0,0,0);
+      const diff=Math.floor((dt-start)/86400000);
+      if(diff<0)continue;
+      let code=cycleSequence[diff%seqLen];
+
+      // Sécurité : Nuit → Matin interdit
+      if(code==='M'&&diff>0){
+        const prev=new Date(dt);prev.setDate(prev.getDate()-1);
+        const pk=`${prev.getFullYear()}-${prev.getMonth()}-${prev.getDate()}-${ei}`;
+        const prevCode=planData[pk]||cycleSequence[(diff-1)%seqLen];
+        if(prevCode==='N'){code='R';conflicts++;}
+      }
+      planData[`${y}-${m}-${d}-${ei}`]=code;
+      count++;
+      if(emp.id){
+        cloudEntries.push({
+          jour:`${y}-${String(m+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`,
+          employee_id:emp.id,shift_code:code,
+          updated_at:new Date().toISOString()
+        });
+      }
+    }
+  }
+
+  S.set('sc_plan',planData);
+  if(cloudMode)cloudBulkSetPlan(cloudEntries);
+  document.getElementById('cy-warning').style.display=conflicts?'block':'none';
+
+  if(!conflicts){
+    closeSheet('sheet-cycle');
+    renderPlanning();renderHome();
+    toast(`✅ ${count} shifts générés pour ${emp.nom} !`);
+  } else {
+    // Garder la sheet ouverte pour montrer l'alerte
+    renderPlanning();renderHome();
+    toast(`✅ ${count} shifts générés (${conflicts} conflits N→M corrigés)`);
+  }
+}
+
+// ══════════════════════════════════════
+// MODULE 3 — RÉCLAMATIONS AVANCÉES
+// ══════════════════════════════════════
+let reclFilterStatut='', reclFilterPriorite='';
+let reclAttachmentName='';
+
+function showFileName(){
+  const f=document.getElementById('r-file');
+  if(f.files&&f.files[0]){
+    reclAttachmentName=f.files[0].name;
+    document.getElementById('r-file-name').textContent=f.files[0].name;
+    document.getElementById('r-file-name').style.color='var(--p1)';
+  }
+}
+
+function renderReclDashboard(){
+  const total=reclamations.length;
+  const termines=reclamations.filter(r=>r.statut==='Terminé').length;
+  const urgentes=reclamations.filter(r=>r.priorite==='Urgente'&&r.statut!=='Terminé').length;
+  const enCours=reclamations.filter(r=>r.statut==='En cours').length;
+  const ratio=total?Math.round(termines/total*100):0;
+  const el=document.getElementById('recl-dashboard');
+  if(!el)return;
+  el.innerHTML=`
+    <div class="card" style="padding:14px;text-align:center">
+      <div style="font-size:28px;font-weight:800;color:var(--p2)">${total}</div>
+      <div style="font-size:11px;color:var(--text2);margin-top:2px">Total réclamations</div>
+    </div>
+    <div class="card" style="padding:14px;text-align:center">
+      <div style="font-size:28px;font-weight:800;color:var(--green)">${ratio}%</div>
+      <div style="font-size:11px;color:var(--text2);margin-top:2px">Dossiers traités</div>
+      <div style="background:var(--border);border-radius:20px;height:4px;margin-top:6px;overflow:hidden">
+        <div style="width:${ratio}%;height:100%;background:var(--green);border-radius:20px;transition:width .5s"></div>
+      </div>
+    </div>
+    <div class="card" style="padding:14px;text-align:center">
+      <div style="font-size:28px;font-weight:800;color:var(--orange)">${enCours}</div>
+      <div style="font-size:11px;color:var(--text2);margin-top:2px">En cours</div>
+    </div>
+    <div class="card" style="padding:14px;text-align:center">
+      <div style="font-size:28px;font-weight:800;color:var(--red)">${urgentes}</div>
+      <div style="font-size:11px;color:var(--text2);margin-top:2px">Urgentes actives</div>
+    </div>`;
+}
+
+async function addReclamation(){
+  const patient=document.getElementById('r-patient').value.trim();
+  const type=document.getElementById('r-type').value;
+  const resp=document.getElementById('r-resp').value;
+  const priorite=document.getElementById('r-priorite').value;
+  const obs=document.getElementById('r-obs').value.trim();
+  if(!patient||!type||!resp){toast('⚠️ Remplissez tous les champs obligatoires.');return;}
+
+  // Upload de la pièce jointe vers Supabase Storage si fichier présent
+  let attachmentInfo=reclAttachmentName||'';
+  const fileEl=document.getElementById('r-file');
+  if(cloudMode&&fileEl?.files?.[0]){
+    toast('📤 Upload du fichier...',1500);
+    const upload=await cloudUploadAttachment(fileEl.files[0]);
+    if(upload?.url)attachmentInfo=upload.name+'|'+upload.url;
+  }
+
+  const now=new Date();
+  const rec={
+    id:Date.now(),
+    date:fmtDate(now)+' '+now.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'}),
+    saisiePar:currentUser.nom,patient,type,pharm:resp,priorite,
+    statut:'En attente',obs,
+    attachment:attachmentInfo
+  };
+  reclamations.unshift(rec);S.set('sc_recl',reclamations);
+  cloudUpsertReclamation(rec);
+  ['r-patient','r-obs'].forEach(id=>document.getElementById(id).value='');
+  document.getElementById('r-type').value='';
+  const fn=document.getElementById('r-file-name');
+  if(fn){fn.textContent='Aucun fichier';fn.style.color='var(--text2)';}
+  if(fileEl)fileEl.value='';
+  reclAttachmentName='';
+  closeSheet('sheet-recl');renderReclamations();updateBadgeRecl();
+
+  // Notifications WhatsApp
+  const nums=getAdminNums();
+  if(nums.length){
+    const icon=priorite==='Urgente'?'🚨':priorite==='Faible'?'📋':'⚠️';
+    const msg=encodeURIComponent(
+      `${icon} NOUVELLE RÉCLAMATION${priorite==='Urgente'?' URGENTE':''}\n\n`+
+      `Bonjour, une nouvelle réclamation de priorité *${priorite}* vient d'être enregistrée.\n\n`+
+      `👤 Plaignant : ${patient}\n`+
+      `📋 Type : ${type}\n`+
+      `👥 Responsable assigné : ${resp}\n`+
+      `⚡ Priorité : ${priorite}\n`+
+      `📊 Statut : En attente\n`+
+      `📅 Date : ${fmtDate(now)}\n`+
+      `🖊️ Saisie par : ${currentUser.nom}\n`+
+      (obs?`\n📝 Observations : ${obs}\n`:'')+
+      (rec.attachment?`📎 Pièce jointe : ${rec.attachment.split('|')[0]}\n`:'')+
+      `\n— Shift Planning`
+    );
+    window.open(`https://wa.me/${nums[0]}?text=${msg}`,'_blank');
+    for(let i=1;i<nums.length;i++){
+      setTimeout(()=>window.open(`https://wa.me/${nums[i]}?text=${msg}`,'_blank'),i*600);
+    }
+    toast(`✅ Réclamation enregistrée — ${nums.length} admin(s) notifié(s) !`);
+  } else {
+    toast('✅ Réclamation enregistrée. ⚠️ Aucun numéro admin configuré.');
+  }
+}
+
+function setReclFilter(type,val,btn){
+  if(type==='statut'){
+    reclFilterStatut=val;
+    document.querySelectorAll('.rf-btn').forEach(b=>{b.classList.remove('active-filter');b.classList.add('btn-ghost');});
+  } else {
+    reclFilterPriorite=val;
+    document.querySelectorAll('.rp-btn').forEach(b=>{b.classList.remove('active-filter');b.classList.add('btn-ghost');});
+  }
+  btn.classList.add('active-filter');btn.classList.remove('btn-ghost');
+  renderReclamations();
+}
+
+function renderReclamations(){
+  renderReclDashboard();
+  let data=reclamations;
+  if(reclFilterStatut) data=data.filter(r=>r.statut===reclFilterStatut);
+  if(reclFilterPriorite) data=data.filter(r=>r.priorite===reclFilterPriorite);
+  const bP={'Urgente':'pill-red','Normale':'pill-orange','Faible':'pill-green'};
+  const bS={'En attente':'pill-orange','En cours':'pill-orange','Terminé':'pill-green','Escaladé':'pill-red'};
+  const iS={'En attente':'⏳','En cours':'🔄','Terminé':'✅','Escaladé':'🚨'};
+  const iP={'Urgente':'🔴','Normale':'🟡','Faible':'🟢'};
+  if(!data.length){document.getElementById('recl-list').innerHTML=`<div class="empty-state"><div class="ei">📋</div><p>Aucune réclamation.</p></div>`;return;}
+  const canDel=isAdmin();
+  document.getElementById('recl-list').innerHTML=data.map(r=>{
+    // Gestion des pièces jointes : "nom|url" ou juste "nom"
+    let attHtml='';
+    if(r.attachment){
+      const parts=r.attachment.split('|');
+      const fname=parts[0];
+      const furl=parts[1];
+      attHtml=furl
+        ? `<a href="${furl}" target="_blank" rel="noopener" style="color:var(--p1);text-decoration:none">📎 ${fname}</a>`
+        : `<span>📎 ${fname}</span>`;
+    }
+    return`
+    <div class="recl-card">
+      <div class="recl-header">
+        <div class="recl-type">${r.type}</div>
+        <span class="pill ${bP[r.priorite||'Normale']}">${iP[r.priorite||'Normale']} ${r.priorite||'Normale'}</span>
+      </div>
+      <div class="recl-meta">
+        <span>👤 ${r.patient}</span><span>👥 ${r.pharm}</span>
+        <span>📅 ${r.date}</span>
+        ${attHtml}
+      </div>
+      <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+        <span style="font-size:13px">${iS[r.statut]||'⏳'}</span>
+        <select class="pill ${bS[r.statut]||'pill-orange'}" onchange="changeStatut(${r.id},this.value)" style="border:none;cursor:pointer;font-family:'Inter',sans-serif;font-weight:600;font-size:11px;border-radius:20px;padding:3px 8px;appearance:none;background:inherit;color:inherit">
+          <option${r.statut==='En attente'?' selected':''}>En attente</option>
+          <option${r.statut==='En cours'?' selected':''}>En cours</option>
+          <option${r.statut==='Terminé'?' selected':''}>Terminé</option>
+          <option${r.statut==='Escaladé'?' selected':''}>Escaladé</option>
+        </select>
+      </div>
+      ${r.obs?`<div class="recl-obs">${r.obs}</div>`:''}
+      <div class="recl-actions">
+        <button class="btn btn-ghost btn-sm" onclick="notifyWARecl(${r.id})">💬 WA</button>
+        ${canDel?`<button class="btn btn-danger btn-sm" onclick="delRecl(${r.id})">🗑</button>`:''}
+      </div>
+    </div>`;}).join('');
+}
+
+function changeStatut(id,s){
+  const r=reclamations.find(r=>r.id===id);
+  if(r){
+    r.statut=s;S.set('sc_recl',reclamations);
+    cloudUpsertReclamation(r);
+    renderReclDashboard();updateBadgeRecl();
+  }
+}
+function delRecl(id){
+  if(!isAdmin()){toast('🔒 Admin requis.');return;}
+  reclamations=reclamations.filter(r=>r.id!==id);
+  S.set('sc_recl',reclamations);
+  cloudDeleteReclamation(id);
+  renderReclamations();updateBadgeRecl();toast('🗑️ Supprimée.');
+}
+// Module 4 — Badge urgentes actives (pas Terminées)
+function updateBadgeRecl(){
+  const n=reclamations.filter(r=>r.priorite==='Urgente'&&r.statut!=='Terminé').length;
+  const b=document.getElementById('badge-recl');
+  b.style.display=n?'block':'none';b.textContent=n>9?'9+':n;
+}
+
+// ══════════════════════════════════════
+// REMPLACEMENTS
+// ══════════════════════════════════════
+function updateShifts(){
+  const md=document.getElementById('rm-ma-date').value;
+  const ci=document.getElementById('rm-collegue').value;
+  const cd=document.getElementById('rm-col-date').value;
+  if(md){const p=parseDate(md);const c=getShift(p.y,p.m,p.d,currentUser.idx);const sh=shiftOf(c);document.getElementById('rm-mon-shift').value=`${sh.code} ${sh.debut||''}`;document.getElementById('rm-mon-shift').style.color=sh.fg;}
+  if(cd&&ci!==''){const p=parseDate(cd);const c=getShift(p.y,p.m,p.d,+ci);const sh=shiftOf(c);document.getElementById('rm-col-shift').value=`${sh.code} ${sh.debut||''}`;document.getElementById('rm-col-shift').style.color=sh.fg;}
+}
+
+function demanderRemp(){
+  const md=document.getElementById('rm-ma-date').value;
+  const ci=document.getElementById('rm-collegue').value;
+  const cd=document.getElementById('rm-col-date').value;
+  const motif=document.getElementById('rm-motif').value.trim();
+  if(!md||ci===''||!cd){toast('⚠️ Remplissez tous les champs.');return;}
+  const mp=parseDate(md),cp=parseDate(cd);
+  const mc=getShift(mp.y,mp.m,mp.d,currentUser.idx);
+  const cc=getShift(cp.y,cp.m,cp.d,+ci);
+  const col=employees[+ci];
+  const now=new Date();
+  const dem={id:Date.now(),date:fmtDate(now)+' '+now.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'}),demandeur:currentUser.nom,demandeurIdx:currentUser.idx,maDate:new Date(mp.y,mp.m,mp.d).toLocaleDateString('fr-FR'),monShift:mc,collegue:col.nom,collegueIdx:+ci,colDate:new Date(cp.y,cp.m,cp.d).toLocaleDateString('fr-FR'),colShift:cc,motif,statut:'En attente'};
+  remplacements.unshift(dem);S.set('sc_remp',remplacements);
+  cloudUpsertRemplacement(dem);
+  notifyAdminsRemp(dem);
+  if(col.wa){const num=col.wa.replace(/\D/g,'');const msg=encodeURIComponent(`🔄 DEMANDE DE REMPLACEMENT\n\n${currentUser.nom} souhaite échanger avec vous.\n📅 Son shift : ${dem.maDate} (${mc})\n📅 Votre shift : ${dem.colDate} (${cc})\n📝 Motif : ${motif||'—'}\n⏳ En attente de validation.\n— Shift Planning`);window.open(`https://wa.me/${num}?text=${msg}`,'_blank');}
+  closeSheet('sheet-remp');renderRemplacements();
+  document.getElementById('rm-motif').value='';
+  toast('✅ Demande envoyée !');
+}
+
+function setRempFilter(f,btn){
+  rempFilter=f;
+  document.querySelectorAll('#page-remplacements .btn.btn-sm').forEach(b=>{b.style.background='';b.style.color='';});
+  btn.style.background='var(--p1)';btn.style.color='#fff';
+  renderRemplacements();
+}
+
+function renderRemplacements(){
+  const data=rempFilter?remplacements.filter(r=>r.statut===rempFilter):remplacements;
+  const admin=isAdmin();
+  if(!data.length){document.getElementById('remp-list').innerHTML=`<div class="empty-state"><div class="ei">🔄</div><p>Aucune demande.</p></div>`;return;}
+  const bS={'En attente':'pill-orange','Approuvé':'pill-green','Refusé':'pill-red'};
+  document.getElementById('remp-list').innerHTML=data.map(r=>{
+    const ms=shiftOf(r.monShift),cs=shiftOf(r.colShift);
+    return`<div class="remp-card">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+        <span style="font-size:12px;font-weight:600;color:var(--text2)">${r.date}</span>
+        <span class="pill ${bS[r.statut]||'pill-orange'}">${r.statut==='En attente'?'⏳':r.statut==='Approuvé'?'✅':'❌'} ${r.statut}</span>
+      </div>
+      <div class="remp-swap">
+        <div class="remp-person">
+          <div class="rp-name">${r.demandeur}</div>
+          <div class="rp-shift">${r.maDate}</div>
+          <span class="pill" style="background:${ms.bg};color:${ms.fg};margin-top:4px">${ms.code} ${ms.label}</span>
+        </div>
+        <div class="remp-arrow">⇄</div>
+        <div class="remp-person">
+          <div class="rp-name">${r.collegue}</div>
+          <div class="rp-shift">${r.colDate}</div>
+          <span class="pill" style="background:${cs.bg};color:${cs.fg};margin-top:4px">${cs.code} ${cs.label}</span>
+        </div>
+      </div>
+      ${r.motif?`<div style="font-size:12px;color:var(--text2);margin-bottom:8px">📝 ${r.motif}</div>`:''}
+      ${admin&&r.statut==='En attente'?`<div class="admin-actions">
+        <button class="btn btn-primary btn-sm" style="flex:1" onclick="approuverRemp(${r.id})">✅ Approuver</button>
+        <button class="btn btn-danger btn-sm" style="flex:1" onclick="refuserRemp(${r.id})">❌ Refuser</button>
+      </div>`:''}
+      ${r.approuvePar?`<div style="font-size:11px;color:var(--text3);margin-top:6px">Par ${r.approuvePar}</div>`:''}
+    </div>`;
+  }).join('');
+}
+
+function approuverRemp(id){
+  if(!isAdmin())return;
+  const dem=remplacements.find(r=>r.id===id);if(!dem)return;
+  const mp=parseLocalFR(dem.maDate),cp=parseLocalFR(dem.colDate);
+  planData[`${mp.y}-${mp.m}-${mp.d}-${dem.demandeurIdx}`]=dem.colShift;
+  planData[`${cp.y}-${cp.m}-${cp.d}-${dem.collegueIdx}`]=dem.monShift;
+  S.set('sc_plan',planData);
+  // Sync les 2 cellules planning vers le cloud
+  cloudSetPlan(mp.y,mp.m,mp.d,dem.demandeurIdx,dem.colShift);
+  cloudSetPlan(cp.y,cp.m,cp.d,dem.collegueIdx,dem.monShift);
+  dem.statut='Approuvé';dem.approuvePar=currentUser.nom;S.set('sc_remp',remplacements);
+  cloudUpsertRemplacement(dem);
+  // Notifier les deux
+  [{idx:dem.demandeurIdx,sh:dem.colShift,date:dem.maDate},{idx:dem.collegueIdx,sh:dem.monShift,date:dem.colDate}].forEach(({idx,sh,date})=>{
+    const e=employees[idx];if(!e?.wa)return;
+    const num=e.wa.replace(/\D/g,'');
+    const msg=encodeURIComponent(`✅ REMPLACEMENT APPROUVÉ\n\n${dem.demandeur} ↔ ${dem.collegue}\n📅 Votre nouveau shift : ${date} (${shiftOf(sh).label})\n✔️ Par : ${currentUser.nom}\n— Shift Planning`);
+    window.open(`https://wa.me/${num}?text=${msg}`,'_blank');
+  });
+  renderRemplacements();renderPlanning();toast('✅ Approuvé et planning mis à jour !');
+}
+
+function refuserRemp(id){
+  if(!isAdmin())return;
+  const dem=remplacements.find(r=>r.id===id);if(!dem)return;
+  const motif=prompt('Motif du refus (optionnel) :','') ||'';
+  dem.statut='Refusé';dem.approuvePar=currentUser.nom;dem.motifRefus=motif;S.set('sc_remp',remplacements);
+  cloudUpsertRemplacement(dem);
+  [{idx:dem.demandeurIdx,nom:'demandeur'},{idx:dem.collegueIdx,nom:'collegue'}].forEach(({idx})=>{
+    const e=employees[idx];if(!e?.wa)return;
+    const num=e.wa.replace(/\D/g,'');
+    const msg=encodeURIComponent(`❌ REMPLACEMENT REFUSÉ\n\n${dem.demandeur} ↔ ${dem.collegue}\n${motif?'📝 Motif : '+motif+'\n':''}✖️ Par : ${currentUser.nom}\n— Shift Planning`);
+    window.open(`https://wa.me/${num}?text=${msg}`,'_blank');
+  });
+  renderRemplacements();toast('❌ Refusé. Membres notifiés.');
+}
+
+function parseLocalFR(fr){const p=fr.split('/');return{d:+p[0],m:+p[1]-1,y:+p[2]};}
+
+// ══════════════════════════════════════
+// PROFIL
+// ══════════════════════════════════════
+function renderProfil(){
+  const e=currentUser;const sh=shiftOf(e.shiftDef);
+  document.getElementById('profil-hero').innerHTML=`
+    <div class="profil-av" style="background:${sh.fg}">${initials(e.nom)}</div>
+    <div class="profil-name">${e.nom}</div>
+    <div class="profil-role">${e.role||'Membre de l\'équipe'}</div>
+    <div class="profil-badge">${e.isAdmin?'👑 Administrateur':'👤 Personnel'}</div>`;
+  document.querySelectorAll('.admin-only').forEach(el=>el.style.display=isAdmin()?'':'none');
+}
+
+function changeMyPin(){
+  const np=document.getElementById('new-pin').value;
+  const cp=document.getElementById('confirm-pin').value;
+  if(!/^\d{4}$/.test(np)){toast('⚠️ PIN doit contenir 4 chiffres.');return;}
+  if(np!==cp){toast('⚠️ PINs ne correspondent pas.');return;}
+  employees[currentUser.idx].pin=np;currentUser.pin=np;
+  S.set('sc_employees',employees);
+  ['new-pin','confirm-pin'].forEach(id=>document.getElementById(id).value='');
+  closeSheet('sheet-pin');toast('✅ PIN mis à jour !');
+}
+
+// ══════════════════════════════════════
+// WHATSAPP
+// ══════════════════════════════════════
+function getAdminNums(){
+  // Recharger les employés depuis le storage pour être sûr d'avoir les dernières données
+  const emps=S.get('sc_employees',employees);
+  const nums=emps.filter(e=>e.isAdmin&&e.wa&&e.wa.trim()!=='').map(e=>e.wa.replace(/\D/g,''));
+  if(!nums.length){
+    const g=(waNum||'').replace(/\D/g,'');
+    if(g)nums.push(g);
+  }
+  return nums;
+}
+function autoNotify(rec){
+  getAdminNums().forEach(num=>{
+    const msg=encodeURIComponent(`🚨 RÉCLAMATION URGENTE\n\n👤 ${rec.patient}\n📋 ${rec.type}\n👥 ${rec.pharm}\n📅 ${rec.date}\n— Shift Planning`);
+    window.open(`https://wa.me/${num}?text=${msg}`,'_blank');
+  });
+}
+function testWA(){
+  const nums=getAdminNums();
+  if(!nums.length){
+    toast('⚠️ Aucun numéro admin trouvé. Vérifiez votre profil dans Administration.');
+    return;
+  }
+  const msg=encodeURIComponent(`✅ TEST Shift Planning\n\nLes notifications WhatsApp fonctionnent correctement.\n👤 Admin : ${currentUser.nom}\n📅 ${new Date().toLocaleString('fr-FR')}\n— Shift Planning`);
+  window.open(`https://wa.me/${nums[0]}?text=${msg}`,'_blank');
+  toast(`✅ Message test envoyé à ${nums.length} admin(s).`);
+}
+function notifyWA(){
+  const nums=getAdminNums();
+  if(!nums.length){toast('⚠️ Aucun numéro admin configuré.');return;}
+  const msg=encodeURIComponent(`📋 Nouvelle réclamation\n\n👤 ${document.getElementById('r-patient').value||'—'}\n📋 ${document.getElementById('r-type').value||'—'}\n— Shift Planning`);
+  nums.forEach(num=>window.open(`https://wa.me/${num}?text=${msg}`,'_blank'));
+}
+function notifyWARecl(id){
+  const r=reclamations.find(r=>r.id===id);if(!r)return;
+  const nums=getAdminNums();if(!nums.length){toast('⚠️ Aucun numéro admin configuré.');return;}
+  const msg=encodeURIComponent(`📋 RÉCLAMATION\n\n👤 ${r.patient}\n📋 ${r.type}\n⚡ ${r.priorite||'Normale'}\n👥 ${r.pharm}\n📊 ${r.statut}\n📅 ${r.date}\n— Shift Planning`);
+  nums.forEach(num=>window.open(`https://wa.me/${num}?text=${msg}`,'_blank'));
+}
+function notifyAdminsRemp(dem){
+  const nums=getAdminNums();if(!nums.length)return;
+  const msg=encodeURIComponent(`🔄 DEMANDE DE REMPLACEMENT\n\n👤 ${dem.demandeur} ↔ ${dem.collegue}\n📅 ${dem.maDate} (${dem.monShift}) ↔ ${dem.colDate} (${dem.colShift})\n📝 ${dem.motif||'—'}\n⏳ En attente\n— Shift Planning`);
+  nums.forEach(num=>window.open(`https://wa.me/${num}?text=${msg}`,'_blank'));
+}
+
+// ══════════════════════════════════════
+// SUPABASE — UI & CONFIGURATION
+// ══════════════════════════════════════
+
+const SQL_SCHEMA = `-- =================================================
+-- SHIFT PLANNING — Schéma Supabase
+-- À exécuter dans SQL Editor de votre projet Supabase
+-- =================================================
+
+-- Activer l'extension uuid si nécessaire
+create extension if not exists "uuid-ossp";
+
+-- TABLE EMPLOYÉS
+create table if not exists sp_employees (
+  id uuid primary key default uuid_generate_v4(),
+  nom text not null,
+  role text default '',
+  shift_def text default 'M',
+  groupe text default '',
+  wa text default '',
+  pin text default '0000',
+  is_admin boolean default false,
+  is_fixed boolean default false,
+  ordre int default 0,
+  created_at timestamptz default now()
+);
+
+-- TABLE SHIFTS (configuration)
+create table if not exists sp_shifts (
+  code text primary key,
+  label text not null,
+  debut text default '',
+  fin text default '',
+  heures int default 0,
+  bg text default '#E2E8F0',
+  fg text default '#475569',
+  ordre int default 0
+);
+
+-- TABLE PLANNING (cellules)
+create table if not exists sp_plan (
+  id uuid primary key default uuid_generate_v4(),
+  jour date not null,
+  employee_id uuid references sp_employees(id) on delete cascade,
+  shift_code text not null,
+  updated_at timestamptz default now(),
+  unique(jour, employee_id)
+);
+create index if not exists sp_plan_jour_idx on sp_plan(jour);
+create index if not exists sp_plan_emp_idx on sp_plan(employee_id);
+
+-- TABLE RÉCLAMATIONS
+create table if not exists sp_reclamations (
+  id bigint primary key,
+  date_str text,
+  saisie_par text,
+  patient text,
+  type text,
+  pharm text,
+  priorite text default 'Normale',
+  statut text default 'En attente',
+  obs text default '',
+  attachment text default '',
+  created_at timestamptz default now()
+);
+
+-- TABLE REMPLACEMENTS
+create table if not exists sp_remplacements (
+  id bigint primary key,
+  date_str text,
+  demandeur text,
+  demandeur_id uuid,
+  ma_date text,
+  mon_shift text,
+  collegue text,
+  collegue_id uuid,
+  col_date text,
+  col_shift text,
+  motif text default '',
+  statut text default 'En attente',
+  approuve_par text default '',
+  motif_refus text default '',
+  created_at timestamptz default now()
+);
+
+-- DONNÉES INITIALES : shifts par défaut
+insert into sp_shifts (code, label, debut, fin, heures, bg, fg, ordre) values
+  ('M','Matin','06:00','14:00',8,'#FDE68A','#92400E',1),
+  ('S','Soir', '14:00','22:00',8,'#BAE6FD','#075985',2),
+  ('N','Nuit', '22:00','06:00',8,'#DDD6FE','#5B21B6',3),
+  ('C','Congé','',     '',     0,'#FCA5A5','#991B1B',4),
+  ('R','Repos','',     '',     0,'#E2E8F0','#475569',5)
+on conflict (code) do nothing;
+
+-- ROW LEVEL SECURITY (accès public via clé anon)
+alter table sp_employees enable row level security;
+alter table sp_shifts enable row level security;
+alter table sp_plan enable row level security;
+alter table sp_reclamations enable row level security;
+alter table sp_remplacements enable row level security;
+
+-- POLITIQUES (à adapter selon vos besoins de sécurité)
+drop policy if exists "Public access" on sp_employees;
+drop policy if exists "Public access" on sp_shifts;
+drop policy if exists "Public access" on sp_plan;
+drop policy if exists "Public access" on sp_reclamations;
+drop policy if exists "Public access" on sp_remplacements;
+create policy "Public access" on sp_employees for all using (true) with check (true);
+create policy "Public access" on sp_shifts for all using (true) with check (true);
+create policy "Public access" on sp_plan for all using (true) with check (true);
+create policy "Public access" on sp_reclamations for all using (true) with check (true);
+create policy "Public access" on sp_remplacements for all using (true) with check (true);
+
+-- REALTIME : activer pour synchronisation en temps réel
+alter publication supabase_realtime add table sp_employees;
+alter publication supabase_realtime add table sp_shifts;
+alter publication supabase_realtime add table sp_plan;
+alter publication supabase_realtime add table sp_reclamations;
+alter publication supabase_realtime add table sp_remplacements;
+
+-- BUCKET STORAGE pour pièces jointes des réclamations
+-- (À créer manuellement dans Storage > New bucket > nom: shift-planning-files, public: true)
+-- Puis exécuter la politique :
+insert into storage.buckets (id, name, public)
+values ('shift-planning-files','shift-planning-files', true)
+on conflict (id) do update set public = true;
+
+drop policy if exists "Public Upload" on storage.objects;
+drop policy if exists "Public Read" on storage.objects;
+create policy "Public Upload" on storage.objects for insert
+  with check (bucket_id = 'shift-planning-files');
+create policy "Public Read" on storage.objects for select
+  using (bucket_id = 'shift-planning-files');
+
+-- ✅ Terminé ! Vous pouvez maintenant connecter Shift Planning.`;
+
+function renderSupabaseSheet(){
+  // Afficher le SQL dans le code-block
+  const sqlEl=document.getElementById('sql-schema');
+  if(sqlEl)sqlEl.textContent=SQL_SCHEMA;
+  // Pré-remplir les inputs avec la config existante
+  const{url,key}=getSbConfig();
+  const urlEl=document.getElementById('sb-url');
+  const keyEl=document.getElementById('sb-key');
+  if(urlEl)urlEl.value=url;
+  if(keyEl)keyEl.value=key;
+  // Statut
+  const dot=document.getElementById('sb-status-dot');
+  const tit=document.getElementById('sb-status-title');
+  const desc=document.getElementById('sb-status-desc');
+  if(cloudMode){
+    if(dot)dot.style.background='#10B981';
+    if(tit)tit.textContent='✅ Connecté au cloud';
+    if(desc)desc.textContent='Vos données sont synchronisées en temps réel avec tous les utilisateurs.';
+    document.getElementById('sb-actions-block').style.display='block';
+    document.getElementById('sb-migration-block').style.display='none';
+  }else{
+    if(dot)dot.style.background='#94A3B8';
+    if(tit)tit.textContent='Mode local';
+    if(desc)desc.textContent='Les données sont stockées uniquement sur cet appareil. Configurez Supabase pour synchroniser entre tous les utilisateurs.';
+    document.getElementById('sb-actions-block').style.display='none';
+    // Afficher le bloc migration s'il y a des données locales
+    const hasData=employees.length>1||reclamations.length>0||Object.keys(planData).length>0;
+    document.getElementById('sb-migration-block').style.display=(url&&key&&hasData)?'block':'none';
+  }
+}
+
+async function copySQLSchema(){
+  try{
+    await navigator.clipboard.writeText(SQL_SCHEMA);
+    toast('📋 Script SQL copié ! Collez-le dans le SQL Editor Supabase.',3500);
+  }catch(e){
+    // Fallback
+    const ta=document.createElement('textarea');
+    ta.value=SQL_SCHEMA;document.body.appendChild(ta);ta.select();
+    try{document.execCommand('copy');toast('📋 SQL copié !');}
+    catch{toast('⚠️ Copie impossible. Sélectionnez et copiez manuellement.');}
+    document.body.removeChild(ta);
+  }
+}
+
+async function testAndSaveSupabase(){
+  const url=document.getElementById('sb-url').value.trim().replace(/\/$/,'');
+  const key=document.getElementById('sb-key').value.trim();
+  if(!url||!key){toast('⚠️ URL et clé requises.');return;}
+  if(!/^https?:\/\/.+\.supabase\.(co|in)/i.test(url)){
+    toast('⚠️ URL Supabase invalide (format : https://xxx.supabase.co)');return;
+  }
+  // Avertir si l'utilisateur colle une "publishable key" au lieu de la clé anon JWT
+  if(key.startsWith('sb_publishable_')||key.startsWith('sb_secret_')){
+    if(!confirm('⚠️ Vous utilisez une nouvelle clé "publishable" au lieu de la clé anon JWT classique (eyJ...).\n\nCela ne fonctionne PAS toujours avec le SDK JS standard.\n\nRecommandation : Project Settings → API Keys → Legacy API Keys → copier la clé "anon" (eyJ...).\n\nTester quand même ?'))return;
+  }else if(!key.startsWith('eyJ')){
+    if(!confirm('⚠️ La clé ne ressemble pas à une clé anon Supabase classique (commence normalement par "eyJ").\n\nTester quand même ?'))return;
+  }
+  toast('🔌 Test de connexion...',1500);
+  S.set('sp_sb_url',url);
+  S.set('sp_sb_key',key);
+  const ok=await initSupabase();
+  if(!ok){
+    const err=window._sbLastError||'Erreur inconnue';
+    alert('❌ Connexion impossible.\n\nDétail technique :\n'+err+'\n\nCauses possibles :\n• Mauvaise clé (utilisez la clé anon JWT eyJ...)\n• Tables non créées (relancez le SQL)\n• URL incorrecte\n• Pas de connexion internet');
+    return;
+  }
+  toast('✅ Connecté ! Chargement des données cloud...',2000);
+  await loadFromCloud();
+  subscribeRealtime();
+  refreshSelects();
+  renderEmpGrid();
+  if(currentUser){
+    renderHome();renderPlanning();renderReclamations();renderRemplacements();renderProfil();
+    updateBadgeRecl();
+  }
+  renderSupabaseSheet();
+  toast('✅ Connecté au cloud Supabase !',2500);
+}
+
+async function migrateLocalToCloud(){
+  if(!cloudMode){toast('⚠️ Connectez-vous d\'abord à Supabase.');return;}
+  if(!confirm(`Importer toutes les données locales vers Supabase ?\n\n• ${employees.length} membres\n• ${shifts.length} shifts\n• ${Object.keys(planData).length} entrées planning\n• ${reclamations.length} réclamations\n• ${remplacements.length} remplacements\n\nCela écrasera les données cloud existantes.`))return;
+  try{
+    setSyncStatus('syncing','Import...');
+    toast('📤 Import en cours...',2000);
+
+    // 1. Employés
+    const empRows=employees.map((e,i)=>({
+      id:e.id,nom:e.nom,role:e.role||'',shift_def:e.shiftDef||'M',
+      groupe:e.groupe||'',wa:e.wa||'',pin:e.pin||'0000',
+      is_admin:!!e.isAdmin,is_fixed:!!e.isFixed,ordre:i
+    }));
+    if(empRows.length){
+      const{error}=await supabase.from('sp_employees').upsert(empRows,{onConflict:'id'});
+      if(error)throw error;
+    }
+
+    // 2. Shifts
+    const shRows=shifts.map((s,i)=>({
+      code:s.code,label:s.label,debut:s.debut||'',fin:s.fin||'',
+      heures:s.heures||0,bg:s.bg,fg:s.fg,ordre:i
+    }));
+    if(shRows.length){
+      const{error}=await supabase.from('sp_shifts').upsert(shRows,{onConflict:'code'});
+      if(error)throw error;
+    }
+
+    // 3. Planning : lots de 500
+    const planRows=[];
+    Object.keys(planData).forEach(k=>{
+      const m=k.match(/^(\d+)-(\d+)-(\d+)-(\d+)$/);
+      if(!m)return;
+      const[,y,mo,d,ei]=m;
+      const emp=employees[+ei];
+      if(!emp?.id)return;
+      planRows.push({
+        jour:`${y}-${String(+mo+1).padStart(2,'0')}-${String(+d).padStart(2,'0')}`,
+        employee_id:emp.id,shift_code:planData[k]
+      });
+    });
+    for(let i=0;i<planRows.length;i+=500){
+      const batch=planRows.slice(i,i+500);
+      const{error}=await supabase.from('sp_plan').upsert(batch,{onConflict:'jour,employee_id'});
+      if(error)throw error;
+    }
+
+    // 4. Réclamations
+    const reclRows=reclamations.map(r=>({
+      id:r.id,date_str:r.date,saisie_par:r.saisiePar||'',patient:r.patient,
+      type:r.type,pharm:r.pharm,priorite:r.priorite||'Normale',
+      statut:r.statut||'En attente',obs:r.obs||'',attachment:r.attachment||''
+    }));
+    if(reclRows.length){
+      const{error}=await supabase.from('sp_reclamations').upsert(reclRows,{onConflict:'id'});
+      if(error)throw error;
+    }
+
+    // 5. Remplacements
+    const rempRows=remplacements.map(r=>{
+      const dEmp=employees[r.demandeurIdx];
+      const cEmp=employees[r.collegueIdx];
+      return{
+        id:r.id,date_str:r.date,demandeur:r.demandeur,
+        demandeur_id:dEmp?.id||null,ma_date:r.maDate,mon_shift:r.monShift,
+        collegue:r.collegue,collegue_id:cEmp?.id||null,
+        col_date:r.colDate,col_shift:r.colShift,
+        motif:r.motif||'',statut:r.statut||'En attente',
+        approuve_par:r.approuvePar||'',motif_refus:r.motifRefus||''
+      };
+    });
+    if(rempRows.length){
+      const{error}=await supabase.from('sp_remplacements').upsert(rempRows,{onConflict:'id'});
+      if(error)throw error;
+    }
+
+    setSyncStatus('cloud','Cloud');
+    toast(`✅ Migration terminée ! ${empRows.length} membres, ${planRows.length} shifts, ${reclRows.length} réclamations.`,4000);
+    renderSupabaseSheet();
+  }catch(e){
+    console.error('migrateLocalToCloud:',e);
+    setSyncStatus('error','Erreur');
+    toast('❌ Erreur de migration : '+(e.message||e),5000);
+  }
+}
+
+async function resyncFromCloud(){
+  if(!cloudMode){toast('⚠️ Mode local actif.');return;}
+  toast('🔄 Resynchronisation...',1500);
+  await loadFromCloud();
+  refreshSelects();
+  if(currentUser){
+    renderHome();renderPlanning();renderReclamations();renderRemplacements();
+    updateBadgeRecl();
+  }
+  toast('✅ Données rechargées depuis le cloud.');
+}
+
+function disconnectSupabase(){
+  if(!confirm('Se déconnecter du cloud ?\n\nLes données locales sont conservées.\nLa configuration Supabase sera supprimée.'))return;
+  // Désabonner du realtime
+  realtimeChannels.forEach(ch=>{try{supabase?.removeChannel(ch);}catch{}});
+  realtimeChannels=[];
+  S.remove('sp_sb_url');
+  S.remove('sp_sb_key');
+  cloudMode=false;
+  supabase=null;
+  setSyncStatus('local','Local');
+  closeSheet('sheet-supabase');
+  toast('🔌 Déconnecté du cloud. Mode local activé.');
+}
+
+function renderAboutSheet(){
+  const mode=cloudMode?'☁️ Cloud (Supabase)':'💾 Local (cet appareil)';
+  document.getElementById('ab-mode').textContent=cloudMode?'cloud':'local';
+  const info=document.getElementById('ab-storage-info');
+  if(info){
+    info.innerHTML=`Mode actuel : <strong>${mode}</strong><br>
+      ${employees.length} membres · ${Object.keys(planData).length} entrées planning<br>
+      ${reclamations.length} réclamations · ${remplacements.length} remplacements`;
+  }
+}
+
+// Cliquer sur la pastille de sync ouvre la config Supabase (si admin)
+document.getElementById('sync-pill')?.addEventListener('click',()=>{
+  if(!currentUser){toast('Connectez-vous d\'abord.');return;}
+  if(!isAdmin()){toast('🔒 Réservé aux administrateurs.');return;}
+  openSheet('sheet-supabase');
+});
+
+// ══════════════════════════════════════
+// EXPORT
+// ══════════════════════════════════════
+function exportPDF(){
+  const table=document.getElementById('plan-table').outerHTML;
+  const titre=`Planning ${MOIS[curMonth]} ${curYear}`;
+  const legend=document.getElementById('legend').innerHTML;
+  const html=`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${titre}</title>
+  <style>body{font-family:Arial,sans-serif;padding:14px}h2{color:#0284C7;margin-bottom:8px}
+  .leg{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:10px;font-size:11px}
+  table{border-collapse:collapse;min-width:100%;font-size:10px}
+  th{background:#0284C7;color:#fff;padding:5px 3px;text-align:center;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  th.nc{text-align:left;padding:5px 8px;background:#0369A1;min-width:90px}
+  th.tc{background:#0369A1}td{border:1px solid #E2E8F0;text-align:center;padding:1px}
+  td.en{text-align:left;padding:4px 8px;font-weight:600;background:#F8FAFC}
+  td.tc{font-weight:700;background:#EFF6FF;color:#0284C7}
+  .sc{display:inline-flex;align-items:center;justify-content:center;width:26px;height:22px;border-radius:4px;font-size:10px;font-weight:700;margin:1px;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  .btn-p{display:block;margin:12px auto;padding:9px 24px;background:#0284C7;color:#fff;border:none;border-radius:8px;font-size:13px;cursor:pointer}
+  @media print{.btn-p{display:none}@page{size:A4 landscape;margin:1cm}}</style></head><body>
+  <h2>📅 ${titre}</h2><div class="leg">${legend}</div>
+  ${table}
+  <button class="btn-p" onclick="window.print()">🖨️ Imprimer / PDF</button>
+  <script>document.querySelectorAll('.sc').forEach(el=>{const s=el.getAttribute('style')||'';const bg=s.match(/background:([^;]+)/);const co=s.match(/color:([^;]+)/);if(bg)el.style.background=bg[1];if(co)el.style.color=co[1];el.removeAttribute('onclick');})<\/script>
+  </body></html>`;
+  const blob=new Blob([html],{type:'text/html;charset=utf-8'});
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.target='_blank';a.click();
+}
+
+function exportReclCSV(scope){
+  const data=scope==='all'?reclamations:reclamations.filter(r=>r.statut===reclFilter);
+  if(!data.length){toast('Aucune réclamation à exporter.');return;}
+  const hdr=['Date','Plaignant','Type','Responsable','Priorité','Statut','Observations','Saisie par'];
+  const rows=data.map(r=>[r.date,r.patient,r.type,r.pharm,r.priorite||'Normale',r.statut,(r.obs||'').replace(/,/g,';'),r.saisiePar||'']);
+  const csv=[hdr,...rows].map(r=>r.map(v=>`"${v}"`).join(',')).join('\n');
+  const a=document.createElement('a');a.href=URL.createObjectURL(new Blob(['\uFEFF'+csv],{type:'text/csv;charset=utf-8'}));
+  a.download=`Reclamations_${new Date().toLocaleDateString('fr-FR').replace(/\//g,'-')}.csv`;a.click();
+  toast('✅ CSV exporté !');
+}
+
+function exportReclPDF(scope){
+  const data=scope==='all'?reclamations:reclamations.filter(r=>r.statut===reclFilter);
+  if(!data.length){toast('Aucune réclamation à exporter.');return;}
+  const now=new Date().toLocaleDateString('fr-FR');
+  const bP={'Urgente':'#EF4444','Normale':'#F59E0B','Faible':'#10B981'};
+  const bS={'En cours':'#F59E0B','Résolu':'#10B981','Escaladé':'#EF4444'};
+  const rows=data.map((r,i)=>`<tr style="background:${i%2?'#F8FAFC':'#fff'}">
+    <td>${r.date}</td><td style="font-weight:600">${r.patient}</td><td>${r.type}</td><td>${r.pharm}</td>
+    <td><span style="background:${bP[r.priorite||'Normale']}22;color:${bP[r.priorite||'Normale']};border-radius:12px;padding:2px 8px;font-size:11px;font-weight:600">${r.priorite||'Normale'}</span></td>
+    <td><span style="background:${bS[r.statut]}22;color:${bS[r.statut]};border-radius:12px;padding:2px 8px;font-size:11px;font-weight:600">${r.statut}</span></td>
+    <td style="font-size:11px;color:#64748B">${r.obs||'—'}</td></tr>`).join('');
+  const html=`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Réclamations</title>
+  <style>body{font-family:Arial,sans-serif;padding:14px;font-size:13px}h2{color:#0284C7;margin-bottom:8px}
+  table{width:100%;border-collapse:collapse;font-size:12px}th{background:#0284C7;color:#fff;padding:8px 10px;text-align:left;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  td{padding:8px 10px;border-bottom:1px solid #E2E8F0;vertical-align:middle}
+  .btn-p{display:block;margin:12px auto;padding:9px 24px;background:#0284C7;color:#fff;border:none;border-radius:8px;font-size:13px;cursor:pointer}
+  @media print{.btn-p{display:none}@page{size:A4 landscape;margin:1cm}}</style></head><body>
+  <h2>📋 Réclamations — Exportées le ${now}</h2>
+  <table><thead><tr><th>Date</th><th>Plaignant</th><th>Type</th><th>Responsable</th><th>Priorité</th><th>Statut</th><th>Observations</th></tr></thead><tbody>${rows}</tbody></table>
+  <button class="btn-p" onclick="window.print()">🖨️ Imprimer / PDF</button>
+  </body></html>`;
+  const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([html],{type:'text/html;charset=utf-8'}));a.target='_blank';a.click();
+}
+
+// ══════════════════════════════════════
+// SHEETS
+// ══════════════════════════════════════
+function openSheet(id){
+  document.getElementById('ov-'+id).classList.add('open');
+  document.getElementById(id).classList.add('open');
+  if(id==='sheet-cycle'){
+    document.getElementById('cy-emp').innerHTML='<option value="">— Sélectionner —</option>'+
+      employees.map((e,i)=>`<option value="${i}">${e.nom}</option>`).join('');
+    document.getElementById('cy-start').value=new Date().toISOString().split('T')[0];
+    document.getElementById('cy-warning').style.display='none';
+    cycleSequence=[];renderSeq();
+  }
+  if(id==='sheet-admin')renderAdminEmpList();
+  if(id==='sheet-shifts')renderShiftsCfg();
+  if(id==='sheet-rotation'){
+    const s=S.get('sc_rotStart','');
+    document.getElementById('rot-start').value=s||new Date().toISOString().split('T')[0];
+    updateRotationPreview();
+  }
+  if(id==='sheet-remp'){
+    const td=new Date().toISOString().split('T')[0];
+    document.getElementById('rm-ma-date').value=td;
+    document.getElementById('rm-col-date').value=td;
+    document.getElementById('rm-collegue').innerHTML='<option value="">— Sélectionner —</option>'+employees.map((e,i)=>i===currentUser.idx?'':
+      `<option value="${i}">${e.nom}</option>`).join('');
+    updateShifts();
+  }
+  if(id==='sheet-supabase')renderSupabaseSheet();
+  if(id==='sheet-about')renderAboutSheet();
+}
+function closeSheet(id){
+  document.getElementById('ov-'+id).classList.remove('open');
+  document.getElementById(id).classList.remove('open');
+}
+
+// ══════════════════════════════════════
+// REFRESH SELECTS
+// ══════════════════════════════════════
+function refreshSelects(){
+  const shOpts=shifts.map(s=>`<option value="${s.code}">${s.code} – ${s.label}${s.debut?' ('+s.debut+')':''}</option>`).join('');
+  ['a-shift'].forEach(id=>{const el=document.getElementById(id);if(el)el.innerHTML=shOpts;});
+  const empOpts='<option value="">— Sélectionner —</option>'+employees.map(e=>`<option>${e.nom}</option>`).join('');
+  const rr=document.getElementById('r-resp');if(rr)rr.innerHTML=empOpts;
+}
+
+// ══════════════════════════════════════
+// SWITCH TOGGLE (admin checkbox)
+// ══════════════════════════════════════
+document.getElementById('a-admin').addEventListener('change',function(){
+  const sl=document.getElementById('a-admin-slider');
+  sl.style.background=this.checked?'var(--p1)':'#ccc';
+  if(this.checked)sl.style.setProperty('--tw','18px');
+});
+
+// ══════════════════════════════════════
+// INIT
+// ══════════════════════════════════════
+function initApp(){
+  refreshSelects();
+  renderHome();
+  renderPlanning();
+  renderReclamations();
+  renderReclDashboard();
+  renderRemplacements();
+  renderProfil();
+  updateBadgeRecl();
+  // Mettre à jour la pastille de sync
+  setSyncStatus(cloudMode?'cloud':'local');
+}
+
+// Support clavier physique pour la saisie du PIN
+document.addEventListener('keydown',e=>{
+  const splash=document.getElementById('splash');
+  if(splash&&splash.style.display==='none')return;
+  if(document.getElementById('phase-pin')?.style.display!=='block')return;
+  if(/^\d$/.test(e.key))pk(e.key);
+  else if(e.key==='Backspace')pd();
+  else if(e.key==='Escape')backToGrid();
+});
+
+// Boot
+async function boot(){
+  try{
+    setSyncStatus('local','Local');
+    // Tenter la connexion Supabase si configurée
+    const{url,key}=getSbConfig();
+    if(url&&key){
+      const ok=await initSupabase();
+      if(ok){
+        await loadFromCloud();
+        subscribeRealtime();
+        renderEmpGrid(); // re-render avec données cloud
+      }
+    }
+  }catch(e){
+    console.error('Boot error:',e);
+    setSyncStatus('error','Erreur');
+  }
+}
+
+// Affichage immédiat de la grille (avant TOUT, garantit l'affichage)
+function bootInitialRender(){
+  try{
+    renderEmpGrid();
+  }catch(e){
+    console.error('renderEmpGrid error:',e);
+    const g=document.getElementById('emp-grid');
+    if(g) g.innerHTML='<div style="color:#fff;text-align:center;padding:20px;font-size:13px;background:rgba(255,255,255,.1);border-radius:12px">⚠️ Erreur de chargement<br><small style="opacity:.7">'+(e?.message||e)+'</small><br><button onclick="resetAllData()" style="margin-top:10px;background:#fff;color:#0EA5E9;border:none;padding:8px 14px;border-radius:8px;font-weight:700;font-size:12px">🔄 Réinitialiser</button></div>';
+  }
+}
+
+// Lancer le rendu dès que possible
+if(document.readyState==='loading'){
+  document.addEventListener('DOMContentLoaded',bootInitialRender);
+}else{
+  bootInitialRender();
+}
+
+// Capture d'erreurs JS visibles (utile pour debug mobile)
+window.addEventListener('error',ev=>{
+  const g=document.getElementById('emp-grid');
+  if(g&&!g.children.length){
+    g.innerHTML='<div style="color:#fff;text-align:center;padding:20px;font-size:11px;background:rgba(255,0,0,.2);border-radius:10px">⚠️ '+ev.message+'<br><small style="opacity:.7">'+(ev.filename||'')+':'+(ev.lineno||'')+'</small></div>';
+  }
+});
+
+// Lancement Supabase en ARRIÈRE-PLAN, après un délai pour laisser l'UI s'afficher
+setTimeout(()=>{boot();},500);
+</script>
+</body>
+</html>
